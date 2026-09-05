@@ -59,6 +59,48 @@ no longer have to know about each other.
 A B<language> is one config file format, and what it has to know is how to read
 that format, how two fragments of it combine, and how to write it back.
 
+=head2 Before you write a language: check there is not one already
+
+B<Do not adopt a file whose software can already read a directory.>  A native
+C<conf.d> is better than anything here by every measure -- the daemon reads the
+fragments itself, there is no generated file to be edited by mistake, no drop-in
+to go wrong on a hardened unit, and nothing to go stale if configd is removed.
+Configd exists for the software that has no such thing, and using it where a
+real mechanism exists trades a working feature for a moving part.
+
+The check is quick, and the answers here were all surprising in one direction or
+the other, so make it rather than assuming:
+
+=over 4
+
+=item * Is there a directory the daemon reads? C<ls /etc/E<lt>thingE<gt>/conf.d>,
+and then whether the config actually names it.  chrony ships
+F</etc/chrony/conf.d> and reads it only if C<chrony.conf> says C<confdir>.  A
+directory that exists and is never read looks exactly like one that works.
+
+=item * Is there an include directive, and B<does it take a glob or a
+directory?>  A single-file include is not a C<conf.d>: adding a fragment still
+means editing the main file, which is the thing we are trying to stop.  redis's
+C<include> is a fatal error on a glob.  opendkim's C<Include> reads one file,
+refuses a glob, and B<silently ignores a directory> -- it exits zero having read
+nothing at all, so testing that it "worked" proves nothing unless the file you
+point it at contains something it would reject.
+
+=back
+
+What the four here answered:
+
+    postfix     nothing at all                                     -> ours
+    opendmarc   Include is not a directive it knows                -> ours
+    redis       include of one file; a glob is a fatal error       -> ours
+    opendkim    Include of one file; glob refused, directory ignored -> ours
+    chrony      confdir, shipped and supported since 4.0           -> NOT ours
+
+chrony had a language here and lost it.  The fleet's own template was
+overwriting the vendor's C<confdir> line out of the file, which left a conf.d
+that looked like it worked and did nothing; putting the line back was one line
+of template against a language, a drop-in and three bugs.
+
 =head2 How it is kept honest
 
 A generated file that anything else can edit will be edited, and the edit will

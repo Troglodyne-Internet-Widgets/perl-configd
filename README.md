@@ -98,7 +98,9 @@ on whatever perl the guest already has rather than one somebody installed first.
 Ubuntu 24.04 ships 5.38 and 22.04 ships 5.34.
 
 [Configd::Language](https://metacpan.org/pod/Configd%3A%3ALanguage) is where the design is written down and what you subclass
-to teach it a new format.
+to teach it a new format.  Read the part about checking for a native `conf.d`
+first: this is for software that has none, and using it where a real mechanism
+exists trades a working feature for a moving part.
 
 # NAME
 
