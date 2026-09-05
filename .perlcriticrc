@@ -57,10 +57,11 @@ formats = #!/usr/bin/env perl
 [ProhibitNoWarningsRedefine]
 [RequireFatalWarnings]
 [ProhibitUnusedImports]
-# Neither of these can be seen statically: IO::Prompter installs prompt() from a
-# custom import rather than @EXPORT, and Text::Xslate loads its TT2 bridge by
-# name, from a string.
-allow = IO::Prompter Text::Xslate::Bridge::TT2 re
+# Modules imported for a side effect rather than for a symbol, which the policy
+# cannot see.  `re` is here because every file says `use re '/aa'`.  Add your
+# own: IO::Prompter installs prompt() from a custom import rather than @EXPORT,
+# and anything loaded by name from a string is invisible the same way.
+allow = re
 # Extensions to perl -c
 [CompileTime]
 # Good idea, but module doesn't install due to bad testsuite...we'll have to fork

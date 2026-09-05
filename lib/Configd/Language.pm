@@ -21,15 +21,24 @@ read, merged and written back.
 =head1 SYNOPSIS
 
     package Configd::Language::example;
+
     use parent qw{Configd::Language};
 
-    sub files {
-        return ( { path => '/etc/example.conf', owner => 'root:root', mode => 0644 } );
+    sub files { return ( { path => '/etc/example.conf', mode => 0o644 } ) }
+    sub units { return ('example.service') }
+
+    sub parse {
+        my ( $self, $text ) = @_;
+        return [ map { m/(\w+)=(.*)/ ? { key => $1, value => $2 } : { text => $_ } }
+              split( qq{\n}, $text ) ];
     }
 
-    sub units    { return ('example.service') }
-    sub parse    { my ($self, $text) = @_; ... return \@directives }
-    sub emit     { my ($self, $directives) = @_; ... return $text }
+    sub emit {
+        my ( $self, $directives ) = @_;
+        return join( qq{\n}, map { defined $_->{key} ? "$_->{key}=$_->{value}" : $_->{text} } @$directives );
+    }
+
+    sub accumulates { my ( $self, $key ) = @_; return $key eq 'domains' }
 
 =head1 DESCRIPTION
 

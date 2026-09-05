@@ -31,15 +31,84 @@ Configd - give software without a conf.d one anyway.
 
 =head1 DESCRIPTION
 
-Some software takes its configuration from one file and offers no way to add to
-it. Anything automating that software has to edit the file, and two things
-editing the same file cannot both win: the second one either overwrites the
-first or duplicates it.
+Postfix keeps its configuration in F</etc/postfix/main.cf> and offers
+C<postconf -e> to change it.  That is fine for a person at a terminal and wrong
+for anything automated, because C<postconf -e> B<sets> a parameter -- there is no
+way to B<add> to one.
 
-Configd puts a fragment directory beside each such file, makes the file itself
-generated output, and rebuilds it from the fragments whenever the service starts
-or reloads. Adding to the configuration becomes writing a file, which two
-things can do without knowing about each other.
+Provisioning a second domain onto a mail server that already hosts one is enough
+to hit it:
+
+    postconf -e "mydestination = first.example.com"     # the first domain
+    postconf -e "mydestination = second.example.com"    # the second
+
+The second run does not add the second domain.  It replaces the first, and mail
+for C<first.example.com> quietly stops being delivered locally.  Nothing errors,
+nothing logs, and the two provisioning runs had no way to know about each other.
+
+Software that ships a C<conf.d> does not have this problem: each thing drops in a
+file and the daemon reads them all.  Plenty of software does not ship one.
+
+=head2 What this does
+
+C<configd adopt postfix> gives it one anyway:
+
+=over 4
+
+=item * F</etc/postfix/main.cf> becomes B<generated output>.
+
+=item * F</etc/postfix/main.cf.d/> appears beside it, holding fragments in
+main.cf's own syntax.
+
+=item * Whatever was in main.cf becomes C<main.cf.d/00-original>, so the
+distribution's defaults and anything the administrator had done keep winning
+wherever nothing later has an opinion.
+
+=item * A systemd drop-in regenerates the file every time the service starts or
+reloads, so what the daemon reads is always what the fragments say.
+
+=back
+
+Two domains can then each write their own file and both get what they asked for:
+
+    mydestination = $myhostname, localhost, first.example.com, second.example.com
+
+=head2 Which settings merge, and which do not
+
+This is the whole design decision, and it is per setting.
+
+Most are B<values>: two fragments setting C<myhostname> disagree, and the later
+one wins.  Some are B<lists>: two fragments each naming a domain in
+C<mydestination> both meant it, and joining them is the only answer that does not
+lose one.  A language says which is which by overriding C<accumulates>.
+
+L<Configd::Language::postfix> deliberately does B<not> accumulate
+C<smtpd_recipient_restrictions> and its relatives, even though they are lists.
+They are I<ordered> lists where the order is the meaning, and joining two end to
+end produces something that parses and that neither fragment asked for -- a
+C<permit_> landing ahead of a check that was supposed to run first is an open
+relay.  Two fragments disagreeing about a restriction list is something a person
+should look at.
+
+=head2 Caveats
+
+B<Comments are not carried into the generated file.>  A comment is anchored to
+the setting below it, and once several fragments have had their say there may be
+no such setting any more -- reproducing the distribution's paragraph above a
+value that has since been replaced tells the reader something untrue.  They stay
+in the fragment they were written in, and C<00-original> keeps every one the file
+arrived with.
+
+B<Editing the generated file works until the next restart.>  That is deliberate:
+long enough to test something, short enough that nobody comes to rely on it.  The
+header on the file says so.
+
+=head2 Requirements
+
+Core perl 5.34 or newer, and nothing else.  Deliberately: this runs from
+C<ExecStartPre>, so it stands between a service and starting, and it has to work
+on whatever perl the guest already has rather than one somebody installed first.
+Ubuntu 24.04 ships 5.38 and 22.04 ships 5.34.
 
 L<Configd::Language> is where the design is written down and what you subclass
 to teach it a new format.

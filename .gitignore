@@ -3,11 +3,11 @@
 *.swn
 
 # Build leavings
-MYMETA*
+MYMETA.json
+MYMETA.yml
 Makefile
 pm_to_blib
 blib/
-.build/
-Configd-*/
-Configd-*.tar.gz
 cover_db/
+.build
+Configd-*

@@ -20,11 +20,14 @@ daemon reads them.
 
 =head1 SYNOPSIS
 
+    use Configd();
     use Configd::Unit();
 
-    my $unit = Configd::Unit->new( language => $postfix, configd => '/usr/bin/configd' );
+    my $postfix = Configd->language('postfix');
+    my $unit    = Configd::Unit->new( language => $postfix, configd => '/usr/bin/configd' );
+
     my @written = $unit->install();
-    $unit->reload();
+    my $wrapped = $unit->installed();
 
 =head1 DESCRIPTION
 
@@ -166,7 +169,7 @@ sub install {
 Take the drop-in back off every unit, returning the paths removed.
 
 The generated files are left where they are, because the service is running on
-them.  L<Configd::Language/release> is what puts the originals back.
+them.  C<Configd::Language::release> is what puts the originals back.
 
 =cut
 

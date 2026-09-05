@@ -18,9 +18,22 @@ a conf.d for.
 
 =head1 SYNOPSIS
 
-    configd adopt postfix
-    printf 'mydestination = example.com\n' > /etc/postfix/main.cf.d/50-example.cf
-    systemctl restart postfix
+    use Configd();
+
+    Configd->adopt('postfix');    # main.cf and master.cf become generated
+    Configd->build('postfix');    # which is what the systemd drop-in then runs
+
+From a shell, which is how it is actually used:
+
+=over 4
+
+=item C<configd adopt postfix>
+
+=item C<< printf 'mydestination = example.com\n' > /etc/postfix/main.cf.d/50-example.cf >>
+
+=item C<systemctl restart postfix>
+
+=back
 
 =head1 DESCRIPTION
 
