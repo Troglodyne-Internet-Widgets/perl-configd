@@ -106,7 +106,11 @@ a person should look at.
 
 =head2 files()
 
+C<main.cf> and C<master.cf>.
+
 =head2 units()
+
+C<postfix@.service>, the templated unit.
 
 =cut
 
@@ -129,7 +133,11 @@ sub units {
 
 =head2 accumulates($key)
 
+True for the list parameters above.
+
 =head2 separator($key)
+
+A comma and a space for main.cf; master.cf entries are never joined.
 
 =cut
 
