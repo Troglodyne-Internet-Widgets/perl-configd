@@ -10,4 +10,9 @@ pm_to_blib
 blib/
 cover_db/
 .build
-Configd-*
+
+# The tarball dzil builds and the directory it builds it from, anchored to the
+# root: unanchored, `Configd-*` also matches the tests named after the modules
+# they cover, and `git add` skips an ignored file without saying so.
+/Configd-*.tar.gz
+/Configd-*/

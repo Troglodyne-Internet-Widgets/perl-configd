@@ -9,6 +9,8 @@ use warnings FATAL => 'all';
 
 use re '/aa';
 
+use parent qw{Configd::Language};
+
 =head1 NAME
 
 Configd::Syntax::Spaced - config files that are a directive, some whitespace and
@@ -16,13 +18,13 @@ a value.
 
 =head1 SYNOPSIS
 
-    package Configd::Language::example;
+    package Configd::Language::spaced_example;
 
-    use parent qw{Configd::Language};
-    use Configd::Syntax::Spaced();
+    use parent qw{Configd::Syntax::Spaced};
 
-    sub parse { my ( $self, $text ) = @_; return Configd::Syntax::Spaced::parse($text) }
-    sub emit  { my ( $self, $d )    = @_; return Configd::Syntax::Spaced::emit($d) }
+    sub files   { return ( { path => '/etc/example.conf', mode => 0o644 } ) }
+    sub units   { return ('example.service') }
+    sub repeats { my ( $self, $key ) = @_; return $key eq 'listen' }
 
 =head1 DESCRIPTION
 
@@ -36,13 +38,17 @@ directive, whitespace, and the rest of the line -- and differ only in which
 directives may be said twice.  One reader and one writer between them, rather
 than four that drift apart.
 
-Not a base class, because L<Configd> finds languages by looking for modules
-under C<Configd::Language::>, and anything put there to be inherited from would
-be offered as a language somebody could adopt.
+A language in this shape subclasses this rather than L<Configd::Language>, and
+says only what is its own: its files, its units, and which of its directives may
+be said more than once.
 
-=head1 FUNCTIONS
+It lives under C<Configd::Syntax::> rather than C<Configd::Language::> because
+L<Configd> finds languages by looking for modules under the latter, and a base
+class put there would be offered as a language somebody could adopt.
 
-=head2 parse($text)
+=head1 METHODS
+
+=head2 $language->parse($text)
 
 The directives in a fragment.  Comments and blank lines come back as text with
 no key, so they keep their place in a file that is not merged.
@@ -50,7 +56,7 @@ no key, so they keep their place in a file that is not merged.
 =cut
 
 sub parse {
-    my ($text) = @_;
+    my ( $self, $text ) = @_;
 
     my @directives;
     foreach my $line ( split( qq{\n}, $text ) ) {
@@ -74,7 +80,7 @@ sub parse {
     return \@directives;
 }
 
-=head2 emit($directives)
+=head2 $language->emit($directives)
 
 The file those directives make.
 
@@ -85,7 +91,7 @@ maintained by hand, and this file is generated from several of them.
 =cut
 
 sub emit {
-    my ($directives) = @_;
+    my ( $self, $directives ) = @_;
 
     my $out = q{};
     foreach my $directive (@$directives) {

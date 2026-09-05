@@ -9,9 +9,7 @@ use warnings FATAL => 'all';
 
 use re '/aa';
 
-use parent qw{Configd::Language};
-
-use Configd::Syntax::Spaced();
+use parent qw{Configd::Syntax::Spaced};
 
 =head1 NAME
 
@@ -33,11 +31,11 @@ directive, some whitespace, and the rest of the line.
 
 =head2 files()
 
+F</etc/opendmarc.conf>, 0600 opendmarc:opendmarc if it has to be created.
+
 =head2 units()
 
-=head2 parse($text)
-
-=head2 emit($directives)
+C<opendmarc.service>.
 
 =cut
 
@@ -49,14 +47,10 @@ sub units {
     return ('opendmarc.service');
 }
 
-sub parse {
-    my ( $self, $text ) = @_;
-    return Configd::Syntax::Spaced::parse($text);
-}
+=head1 SEE ALSO
 
-sub emit {
-    my ( $self, $directives ) = @_;
-    return Configd::Syntax::Spaced::emit($directives);
-}
+L<Configd::Language>, L<Configd::Syntax::Spaced>
+
+=cut
 
 1;
