@@ -237,8 +237,14 @@ subtest 'the drop-in is what makes the file true' => sub {
 
     # Before it starts and before it reloads: those are the two moments the
     # daemon reads the file, and between them there is nothing to be stale.
-    like( $dropin, qr{^ExecStartPre=/usr/bin/configd build postfix$}m, 'rebuilt before the daemon starts' );
-    like( $dropin, qr{^ExecReload=/usr/bin/configd build postfix$}m,   'and before it reloads' );
+    #
+    # The leading + runs the command with full privileges, outside User=, the
+    # namespace options and the seccomp filter.  Ubuntu 24.04's redis-server
+    # unit sets NoExecPaths=/ with an ExecPaths that does not include
+    # /usr/bin/configd, so without it systemd answers 203/EXEC and leaves redis
+    # failed -- adopting a hardened service took that service down.
+    like( $dropin, qr{^ExecStartPre=\+/usr/bin/configd build postfix$}m, 'rebuilt before the daemon starts' );
+    like( $dropin, qr{^ExecReload=\+/usr/bin/configd build postfix$}m,   'and before it reloads' );
 
     # postfix.service is a oneshot whose ExecStart is /bin/true; the daemon that
     # reads main.cf is an instance of the template.
@@ -251,6 +257,22 @@ subtest 'the drop-in is what makes the file true' => sub {
     is_deeply( [ $language->services() ], ['postfix.service'],  'and the restart goes to the unit that runs' );
 
     is_deeply( [ $unit->install() ], [], 'installing again writes nothing' );
+};
+
+subtest 'a copy of a secret file is as secret as the file' => sub {
+    my $root = scratch();
+
+    # 00-original is the file, so it needs the file's mode.  Falling through to
+    # 0644 published redis.conf's requirepass, and opendkim.conf's key
+    # locations, to every local user on any distro whose /etc/<package> can be
+    # traversed.
+    chmod 0o600, "$root/etc/postfix/master.cf";
+    Configd->adopt( 'postfix', root => $root );
+
+    is( ( stat "$root/etc/postfix/master.cf.d/00-original" )[2] & 0o7777,
+        0o600, 'master.cf.d/00-original is 0600, like the file it copies' );
+    is( ( stat "$root/etc/postfix/main.cf.d/00-original" )[2] & 0o7777,
+        0o644, 'and main.cf.d/00-original is 0644, like the file it copies' );
 };
 
 subtest 'releasing puts the file back and lets go of the service' => sub {

@@ -50,6 +50,8 @@ about C<makestep> disagree, and the later one wins.
 
 =head2 units()
 
+=head2 reloads()
+
 =head2 repeats($key)
 
 =head2 parse($text)
@@ -77,21 +79,49 @@ sub files {
     return ( { path => '/etc/chrony/chrony.conf', mode => 0o644, owner => 'root:root' } );
 }
 
-sub units {
+# chrony.service on Debian and Ubuntu, chronyd.service on Red Hat -- and on
+# Ubuntu both names resolve, because chrony.service declares
+# Alias=chronyd.service and enabling it drops a symlink under
+# /etc/systemd/system.  Following that symlink is how this ended up writing a
+# drop-in systemd never reads and restarting the same daemon twice.
+my @SPELLINGS = qw{chrony.service chronyd.service};
 
-    # chrony.service on Debian and Ubuntu; chronyd.service on Red Hat.  A
-    # drop-in for a unit that is not there is harmless -- systemd ignores the
-    # directory -- and naming both means one language covers both.
-    return ( 'chrony.service', 'chronyd.service' );
+sub _real_units {
+    my ($self) = @_;
+
+    my @found;
+    foreach my $name (@SPELLINGS) {
+        foreach my $dir (qw{/lib/systemd/system /usr/lib/systemd/system /etc/systemd/system}) {
+            my $path = $self->path("$dir/$name");
+            next unless -e $path;
+
+            # An alias, pointing at a unit we have already named.
+            next if -l $path;
+
+            push @found, $name;
+            last;
+        }
+    }
+
+    return @found;
 }
 
-sub services {
-
-    # Only restart what is actually installed.  Trying the other one makes
-    # `configd adopt` report a failure on a host where everything went right.
+sub units {
     my ($self) = @_;
-    return grep { -f "/lib/systemd/system/$_" || -f "/etc/systemd/system/$_" }    ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
-      $self->units();
+
+    # Nothing installed means we are building for a machine that is not this
+    # one -- a --root somewhere -- and both spellings are the honest answer.
+    my @real = $self->_real_units();
+    return @real ? @real : @SPELLINGS;
+}
+
+sub reloads {
+
+    # chronyd has no way to re-read its configuration, which is why the packaged
+    # unit has no ExecReload.  Adding one would make `systemctl reload chrony`
+    # start reporting success while the daemon carries on with the configuration
+    # it started with.
+    return 0;
 }
 
 sub repeats {

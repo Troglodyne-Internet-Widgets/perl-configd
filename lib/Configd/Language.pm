@@ -143,8 +143,16 @@ sub spew {
 
     chmod( ( @was ? $was[2] & 0o7777 : $mode // 0o644 ), $path );
 
+    # Only root can give a file away, and only root should try.  Under a unit
+    # with SystemCallFilter=~@privileged a chown that cannot succeed is not
+    # EPERM, it is SIGSYS: the process is killed and core-dumped part way
+    # through writing a config file.  The drop-in asks for privilege with a `+`
+    # so that this is root in practice, and this is the belt for that braces --
+    # configd should not be a landmine under anybody else's ExecStartPre.
+    return $path if $> != 0;
+
     if (@was) {
-        chown( $was[4], $was[5], $path );
+        chown( $was[4], $was[5], $path ) if $was[4] != $> || $was[5] != $);
     }
     elsif ( defined $owner ) {
         my ( $user, $group ) = split( q{:}, $owner );
@@ -193,6 +201,27 @@ A templated unit is named with the C<@> and no instance -- C<postfix@.service>
 
 sub units {
     return ();
+}
+
+=head2 reloads()
+
+Whether C<systemctl reload> on this service actually makes the daemon re-read
+its configuration.
+
+True by default, which is right for most things.  Say false when the daemon has
+no reload of its own: chronyd has none, so the packaged unit has no
+C<ExecReload>, and adding one makes C<systemctl reload chrony> B<start
+succeeding> while the running daemon carries on with the configuration it
+started with.  A command that reports success and does nothing is worse than one
+that fails.
+
+Where this is false the drop-in installs C<ExecStartPre> only, and a
+configuration change wants a restart.
+
+=cut
+
+sub reloads {
+    return 1;
 }
 
 =head2 services()
@@ -548,7 +577,16 @@ sub adopt {
         my $dir      = $self->fragment_dir($file);
         my $original = "$dir/00-original";
 
-        make_path($dir) unless -d $dir;
+        unless ( -d $dir ) {
+            make_path($dir);
+
+            # No more permissive than the directory the config file lives in:
+            # the fragments are the configuration now, and a 0755 directory
+            # beside a 0700 one hands them to anybody.
+            my ( undef, $parent ) = File::Basename::fileparse($target);
+            my @stat = stat $parent;
+            chmod( $stat[2] & 0o7777, $dir ) if @stat;
+        }
 
         # Already ours.  Re-adopting would take the file we generated last time
         # and make it the first fragment, which duplicates every setting in it.
@@ -557,11 +595,17 @@ sub adopt {
             next;
         }
 
-        if ( -f $target ) {                                                  ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
-            spew( $original, slurp($target) );
+        # 00-original is a copy of the file, so it is as secret as the file.
+        # Letting spew fall through to 0644 published redis.conf's requirepass,
+        # and opendkim.conf's key locations, to every local user on any distro
+        # whose /etc/<package> can be traversed.
+        my @was = stat $target;
+        if (@was) {
+            spew( $original, slurp($target), $was[2] & 0o7777 );
+            chown( $was[4], $was[5], $original ) if $> == 0;
         }
         else {
-            spew( $original, q{} );
+            spew( $original, q{}, $file->{mode} );
         }
 
         $self->write($file);

@@ -60,6 +60,28 @@ Prepending would mean clearing the list with an empty C<ExecStartPre=> and
 restating every line the package shipped, which is precisely the copy that goes
 stale on upgrade.
 
+=head2 Why the commands begin with C<+>
+
+A hardened unit runs C<ExecStartPre> under everything it applies to the daemon
+itself, and a modern packaged unit applies a great deal.  Ubuntu 24.04's
+C<redis-server.service> is the example that taught us:
+
+    User=redis
+    NoExecPaths=/
+    ExecPaths=/usr/bin/redis-server /usr/lib /lib
+    SystemCallFilter=~@privileged
+
+Under that, C</usr/bin/configd> is not an executable path at all -- systemd
+answers C<status=203/EXEC> and, after five tries, leaves redis B<failed>.  Get
+past that and the process is the C<redis> user with C<@privileged> syscalls
+filtered, so writing into F</etc> and putting the file's ownership back are
+C<SIGSYS> rather than C<EPERM>: the helper is killed and core-dumped mid-write.
+
+The C<+> prefix runs the command with full privileges, outside C<User=>, the
+namespace restrictions and the seccomp filter.  Regenerating a config file is
+exactly the kind of setup step it exists for, and without it adopting a hardened
+service takes that service down.
+
 =cut
 
 our $DROPIN = '10-configd.conf';
@@ -119,7 +141,12 @@ sub render {
     my @files    = map { $_->{path} } $self->{language}->files();
     my $list     = join( "\n", map { "#   $_" } @files );
 
-    return <<"UNIT";
+    # A daemon with no reload of its own gets ExecStartPre only: see
+    # Configd::Language::reloads.
+    my @exec = ("ExecStartPre=+$configd build $language");
+    push @exec, "ExecReload=+$configd build $language" if $self->{language}->reloads();
+
+    my $preamble = <<"UNIT";
 # Installed by configd.  Removing this file and running `systemctl daemon-reload`
 # is all it takes to stop configd having anything to do with this service; the
 # files below stay exactly as they were last generated.
@@ -130,9 +157,9 @@ $list
 # Edit the fragments, not the file: this rebuilds it on every start and reload.
 
 [Service]
-ExecStartPre=$configd build $language
-ExecReload=$configd build $language
 UNIT
+
+    return $preamble . join( "\n", @exec ) . "\n";
 }
 
 =head2 $unit->install()
