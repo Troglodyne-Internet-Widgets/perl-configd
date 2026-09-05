@@ -247,6 +247,29 @@ sub accumulates {
     return 0;
 }
 
+=head2 repeats($key)
+
+Whether a directive may appear more than once, each occurrence meaning something
+of its own.
+
+False by default.  Redis takes C<save 900 1> and C<save 300 10> and means both;
+chrony takes a C<server> line per time source.  Neither is a value a later
+fragment replaces, and neither is a list to join with commas -- they are separate
+lines that all have to survive.
+
+Two occurrences that say exactly the same thing still collapse into one, which
+is what makes a fragment safe to write without checking whether somebody else
+already asked for it.
+
+A key cannot both accumulate and repeat; C<accumulates> is checked first.
+
+=cut
+
+sub repeats {
+    my ( $self, $key ) = @_;
+    return 0;
+}
+
 =head2 separator($key)
 
 What joins the parts of an accumulating directive.  A comma and a space by
@@ -366,6 +389,12 @@ sub merge {
             # setting under it, and once several fragments have had their say
             # there is no longer a setting for it to be anchored to.
             next if !defined $key;
+
+            # A repeatable directive is identified by everything it says, so
+            # two different `save` lines are two settings and two identical ones
+            # are one.
+            $key = "$key\0$directive->{value}"
+              if !$self->accumulates($key) && $self->repeats($key);
 
             if ( !exists $by_key{$key} ) {
                 push @order, $key;

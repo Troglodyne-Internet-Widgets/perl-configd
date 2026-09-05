@@ -2,3 +2,4 @@ Revision history for Configd
 
 0.001 2026-09-05 TEODESIAN
     - Initial Release
+    - Languages: postfix (main.cf, master.cf), opendkim, opendmarc, redis, chrony
