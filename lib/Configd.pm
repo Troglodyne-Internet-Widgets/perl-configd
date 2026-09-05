@@ -128,8 +128,6 @@ anything here being edited.
 =cut
 
 sub languages {
-    my ($class) = @_;
-
     my %seen;
     foreach my $dir (@INC) {
         my $path = "$dir/Configd/Language";

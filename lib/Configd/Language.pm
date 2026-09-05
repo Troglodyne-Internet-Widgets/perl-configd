@@ -310,7 +310,7 @@ and is kept in the order it arrived, which is what comments and blank lines are.
 =cut
 
 sub parse {
-    my ( $self, $text ) = @_;
+    my ($self) = @_;
     die( ( ref $self || $self ) . " does not know how to parse anything\n" );
 }
 
@@ -321,7 +321,7 @@ The text of a config file holding those directives, ready to write.
 =cut
 
 sub emit {
-    my ( $self, $directives ) = @_;
+    my ($self) = @_;
     die( ( ref $self || $self ) . " does not know how to write anything\n" );
 }
 
@@ -339,7 +339,6 @@ of them.  That distinction is the whole reason this exists.
 =cut
 
 sub accumulates {
-    my ( $self, $key ) = @_;
     return 0;
 }
 
@@ -362,7 +361,6 @@ A key cannot both accumulate and repeat; C<accumulates> is checked first.
 =cut
 
 sub repeats {
-    my ( $self, $key ) = @_;
     return 0;
 }
 
@@ -374,7 +372,6 @@ default, which is what postfix uses; whitespace-separated languages override it.
 =cut
 
 sub separator {
-    my ( $self, $key ) = @_;
     return ', ';
 }
 
