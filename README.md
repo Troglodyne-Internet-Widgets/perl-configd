@@ -169,6 +169,15 @@ Please see those modules/websites for more information related to this module.
 
 - [Configd::Language](https://metacpan.org/pod/Configd%3A%3ALanguage), [Configd::Unit](https://metacpan.org/pod/Configd%3A%3AUnit), [Configd::Language::postfix](https://metacpan.org/pod/Configd%3A%3ALanguage%3A%3Apostfix)
 
+# BUGS
+
+Please report any bugs or feature requests on the bugtracker website
+[https://github.com/teodesian/perl-configd/issues](https://github.com/teodesian/perl-configd/issues)
+
+When submitting a bug or request, please include a test-file or a
+patch to an existing test-file that illustrates the bug or desired
+feature.
+
 # AUTHORS
 
 Current Maintainers:
