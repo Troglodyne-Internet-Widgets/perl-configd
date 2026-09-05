@@ -1,0 +1,260 @@
+#!/usr/bin/env perl
+
+package Configd::Bin::Configd;
+
+# PODNAME: configd
+# ABSTRACT: Adopt a config file that has no conf.d, and keep it generated.
+
+use 5.041;
+
+use strict;
+use warnings FATAL => 'all';
+
+use re '/aa';
+
+use FindBin::libs;
+
+use Getopt::Long qw{GetOptionsFromArray};
+use Pod::Usage   qw{pod2usage};
+
+use Configd();
+
+=head1 SYNOPSIS
+
+    configd languages
+    configd adopt   postfix
+    configd status  postfix
+    configd build   postfix
+    configd release postfix
+
+=head1 DESCRIPTION
+
+Postfix, and plenty like it, keeps its configuration in one file with no
+C<conf.d> to add to. Two things configuring the same server therefore cannot
+both win.
+
+C<configd adopt> puts a fragment directory beside each such file, moves what is
+there now into it as C<00-original>, and installs a systemd drop-in that
+regenerates the file every time the service starts or reloads. After that,
+configuring the service means writing a file into the fragment directory, which
+any number of things can do without treading on each other.
+
+=head1 COMMANDS
+
+=head2 languages
+
+What this installation knows how to adopt.
+
+=head2 adopt LANGUAGE
+
+Take the language's files over and wrap its service. Reloads systemd and
+restarts the service unless C<--no-restart> says not to.
+
+Running it twice is safe.
+
+=head2 build LANGUAGE
+
+Regenerate the files from their fragments. This is what the drop-in runs; you
+would run it by hand to see what a fragment does without restarting anything.
+
+=head2 status LANGUAGE
+
+Whether the files are adopted, how many fragments each has, and whether the
+service is wrapped.
+
+=head2 release LANGUAGE
+
+Put the original files back and remove the drop-in. The fragment directories
+are left alone, so adopting again picks up where this left off.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<--root> DIR
+
+Work under DIR rather than C</>. For building an image, or for looking at what
+would happen without touching the running system.
+
+=item B<--configd> PATH
+
+The path to this program as the generated unit should invoke it. Defaults to
+C</usr/bin/configd>; systemd will not take a relative one.
+
+=item B<--no-restart>
+
+Do not reload systemd or restart the service. Implied by C<--root>, since the
+files being configured are not the ones this machine is running on.
+
+=item B<--quiet>
+
+Say nothing unless something is wrong.
+
+=back
+
+=cut
+
+exit main(@ARGV) unless caller;
+
+sub main {
+    my @args = @_;
+
+    my %opt = ( configd => '/usr/bin/configd' );
+    GetOptionsFromArray(
+        \@args,
+        'root=s'    => \$opt{root},
+        'configd=s' => \$opt{configd},
+        'restart!'  => \$opt{restart},
+        'quiet'     => \$opt{quiet},
+        'help'      => \$opt{help},
+    ) or return 2;
+
+    return pod2usage( -exitval => 0, -verbose => 2 ) if $opt{help};
+
+    my $command = shift @args;
+    return pod2usage( -exitval => 2, -verbose => 1 ) unless defined $command;
+
+    # A root means these are not the files this machine is running on, so there
+    # is nothing here to restart.
+    $opt{restart} //= defined $opt{root} ? 0 : 1;
+
+    my %opts = ( configd => $opt{configd} );
+    $opts{root} = $opt{root} if defined $opt{root};
+
+    my %dispatch = (
+        languages => \&languages,
+        adopt     => \&adopt,
+        build     => \&build,
+        status    => \&status,
+        release   => \&release,
+    );
+
+    my $handler = $dispatch{$command};
+    unless ($handler) {
+        warn "No such command '$command'. Try: " . join( ', ', sort keys %dispatch ) . "\n";
+        return 2;
+    }
+
+    my $result = eval { $handler->( shift(@args), \%opt, \%opts ) };
+    if ($@) {
+        warn $@;
+        return 1;
+    }
+
+    return $result;
+}
+
+sub say_unless_quiet {
+    my ( $opt, @lines ) = @_;
+    return if $opt->{quiet};
+    say $_ for @lines;
+    return;
+}
+
+sub languages {
+    my ( $name, $opt ) = @_;
+
+    my @known = Configd->languages();
+    say_unless_quiet( $opt, @known ? @known : 'No languages installed.' );
+
+    return 0;
+}
+
+sub build {
+    my ( $name, $opt, $opts ) = @_;
+
+    my @changed = Configd->build( $name, %$opts );
+    say_unless_quiet( $opt, @changed ? map { "Rebuilt $_" } @changed : "$name is already up to date" );
+
+    return 0;
+}
+
+sub adopt {
+    my ( $name, $opt, $opts ) = @_;
+
+    my $result = Configd->adopt( $name, %$opts );
+
+    say_unless_quiet( $opt,
+        ( map { "Adopted $_ (its fragments are in $_.d)" } @{ $result->{adopted} } ),
+        ( map { "Wrote $_" } @{ $result->{dropins} } ),
+    );
+
+    # Nothing the daemon reads has changed until systemd is told about the
+    # drop-in, so an adopt that skips this leaves a service running on config it
+    # will regenerate differently the next time anything restarts it.
+    return systemd( $result->{units}, $opt ) if $opt->{restart};
+
+    say_unless_quiet( $opt, 'Not restarting; run systemctl daemon-reload and restart the service to pick this up.' );
+    return 0;
+}
+
+sub release {
+    my ( $name, $opt, $opts ) = @_;
+
+    my $result = Configd->release( $name, %$opts );
+
+    say_unless_quiet( $opt,
+        ( map { "Removed $_" } @{ $result->{dropins} } ),
+        ( map { "Restored $_" } @{ $result->{released} } ),
+    );
+
+    return $opt->{restart} ? systemd( $result->{units}, $opt ) : 0;
+}
+
+sub status {
+    my ( $name, $opt, $opts ) = @_;
+
+    my $status = Configd->status( $name, %$opts );
+
+    my @lines = ("$status->{language}:");
+    foreach my $file ( @{ $status->{files} } ) {
+        my $count = scalar @{ $file->{fragments} };
+        push @lines, sprintf(
+            '  %-30s %s, %d fragment%s',
+            $file->{path},
+            $file->{adopted} ? 'adopted' : 'NOT adopted',
+            $count, $count == 1 ? q{} : 's',
+        );
+        push @lines, "      $_" for @{ $file->{fragments} };
+    }
+    push @lines, '  ' . join( ', ', @{ $status->{units} } ) . ( $status->{wrapped} ? ': wrapped' : ': NOT wrapped' );
+
+    say_unless_quiet( $opt, @lines );
+
+    # So that `configd status x && ...` means what it looks like it means.
+    return $status->{wrapped} ? 0 : 1;
+}
+
+=head1 EXIT STATUS
+
+Zero on success. C<status> exits non-zero when the service is not wrapped, so it
+can be tested. Two for a usage error, one for anything else.
+
+=cut
+
+sub systemd {
+    my ( $units, $opt ) = @_;
+
+    my @commands = ( [qw{systemctl daemon-reload}] );
+
+    # try-restart rather than restart: a service that is not running was not
+    # meant to be started by a configuration change.
+    push @commands, [ 'systemctl', 'try-restart', $_ ] for @$units;
+
+    foreach my $command (@commands) {
+        say_unless_quiet( $opt, '+ ' . join( q{ }, @$command ) );
+
+        # systemd's real API is DBus, and Net::DBus would be the library answer
+        # here.  It is not worth the dependency for two calls that systemctl
+        # makes for us: this runs when an administrator adopts or releases a
+        # service, never from the drop-in, so it is not on any hot path.
+        system(@$command) == 0 or do {    ## no critic (logicLAB::ProhibitShellDispatch)
+            warn "Failed: " . join( q{ }, @$command ) . "\n";
+            return 1;
+        };
+    }
+
+    return 0;
+}
+
+1;

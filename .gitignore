@@ -1,0 +1,13 @@
+*.swp
+*.swo
+*.swn
+
+# Build leavings
+MYMETA*
+Makefile
+pm_to_blib
+blib/
+.build/
+Configd-*/
+Configd-*.tar.gz
+cover_db/
