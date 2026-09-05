@@ -110,7 +110,7 @@ sub new {
     die "A Configd::Unit needs a language\n" unless $opts{language};
 
     $opts{configd} //= '/usr/bin/configd';
-    $opts{root}    //= $opts{language}{root} // q{};
+    $opts{root}    //= $opts{language}->root() // q{};
     $opts{root} =~ s{/\z}{};
 
     return bless { %opts }, $class;

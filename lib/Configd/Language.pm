@@ -132,9 +132,12 @@ literals want; nothing here needs more than that.
 
 =head2 slurp($path)
 
+The whole of a file, decoded as UTF-8, or an exception naming what could not be
+read.
+
 =head2 spew($path, $text, $mode, $owner)
 
-C<spew> writes through a temporary file in the same directory and renames over
+Writes through a temporary file in the same directory and renames over
 the target, so a daemon reading at that moment gets the old file or the new one
 and never half of either.
 
@@ -405,6 +408,18 @@ sub name {
     return ( split( q{::}, $class ) )[-1];
 }
 
+=head2 $language->root()
+
+The directory every path this language touches is relocated under, or the empty
+string for the running system.
+
+=cut
+
+sub root {
+    my ($self) = @_;
+    return $self->{root};
+}
+
 =head2 $language->path($path)
 
 C<$path> under this language's C<root>.  Every path in this class goes through
@@ -435,9 +450,10 @@ The fragment files for one managed file, in the order they are merged.
 
 Sorted by name, so the numeric prefixes everybody already writes on C<conf.d>
 entries do what they look like they do.  Names starting with a dot are skipped,
-and so is anything ending in C<.disabled>, C<.bak>, C<.dpkg-old> or C<~> --
-editors and package managers leave those lying about, and a stray backup silently
-taking part in the merge is a bad afternoon.
+and so is anything ending in C<~>, C<.disabled>, C<.bak>, or one of the suffixes
+dpkg and rpm leave behind -- C<.dpkg-old>, C<.dpkg-new>, C<.dpkg-dist>,
+C<.rpmsave>, C<.rpmnew>.  Editors and package managers leave those lying about,
+and a stray backup silently taking part in the merge is a bad afternoon.
 
 =cut
 

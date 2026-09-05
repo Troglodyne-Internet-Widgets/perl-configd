@@ -191,7 +191,7 @@ sub adopt {
     # Nothing the daemon reads has changed until systemd is told about the
     # drop-in, so an adopt that skips this leaves a service running on config it
     # will regenerate differently the next time anything restarts it.
-    return systemd( $result->{units}, $opt ) if $opt->{restart};
+    return systemd( $result->{services}, $opt ) if $opt->{restart};
 
     say_unless_quiet( $opt, 'Not restarting; run systemctl daemon-reload and restart the service to pick this up.' );
     return 0;
@@ -207,7 +207,7 @@ sub release {
         ( map { "Restored $_" } @{ $result->{released} } ),
     );
 
-    return $opt->{restart} ? systemd( $result->{units}, $opt ) : 0;
+    return $opt->{restart} ? systemd( $result->{services}, $opt ) : 0;
 }
 
 sub status {
@@ -242,13 +242,13 @@ can be tested. Two for a usage error, one for anything else.
 =cut
 
 sub systemd {
-    my ( $units, $opt ) = @_;
+    my ( $services, $opt ) = @_;
 
     my @commands = ( [qw{systemctl daemon-reload}] );
 
     # try-restart rather than restart: a service that is not running was not
     # meant to be started by a configuration change.
-    push @commands, [ 'systemctl', 'try-restart', $_ ] for @$units;
+    push @commands, [ 'systemctl', 'try-restart', $_ ] for @$services;
 
     foreach my $command (@commands) {
         say_unless_quiet( $opt, '+ ' . join( q{ }, @$command ) );

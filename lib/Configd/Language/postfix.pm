@@ -159,24 +159,16 @@ sub services {
 
 =head2 accumulates($key)
 
-True for the list parameters above.
-
-=head2 separator($key)
-
-A comma and a space for main.cf; master.cf entries are never joined.
+True for the list parameters above.  Never true of a master.cf entry, which is a
+row rather than a list: two fragments configuring one service disagree about it,
+and the later one wins.  The base class's comma is therefore the only separator
+this language ever needs.
 
 =cut
 
 sub accumulates {
     my ( $self, $key ) = @_;
     return $ACCUMULATES{$key} // 0;
-}
-
-sub separator {
-    my ( $self, $key ) = @_;
-
-    # master.cf entries are never joined; main.cf lists take a comma.
-    return index( $key, q{/} ) >= 0 ? q{ } : ', ';
 }
 
 =head2 parse($text)
@@ -291,8 +283,16 @@ Write the file back.  Which file, again, from what is in it.
 sub emit {
     my ( $self, $directives ) = @_;
 
-    my $is_master = scalar( grep { defined $_->{key} && index( $_->{key}, q{/} ) >= 0 } @$directives );
+    my $is_master = scalar( grep { _is_master_key( $_->{key} ) } @$directives );
     return $is_master ? $self->_emit_master($directives) : $self->_emit_main($directives);
+}
+
+# A master.cf directive is keyed on the service and its type together, which is
+# the one key in either file with a slash in it: main.cf parameter names are
+# word characters and underscores.
+sub _is_master_key {
+    my ($key) = @_;
+    return defined $key && index( $key, q{/} ) >= 0;
 }
 
 sub _emit_main {

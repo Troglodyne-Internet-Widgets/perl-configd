@@ -138,7 +138,10 @@ adopting, because a service starting is not the time to be taking files over.
 Take a language's files over and wrap its service: move each file into its own
 fragment directory as `00-original`, generate it, and install the drop-in.
 
-Returns a hashref of what happened, which is what the command line prints.
+Returns a hashref of what happened, which is what the command line prints.  Its
+`services` is what to restart, which is not always what the drop-in went on --
+see ["services()" in Configd::Language](https://metacpan.org/pod/Configd%3A%3ALanguage#services).
+
 Safe to run again: a file already adopted is regenerated rather than adopted a
 second time, and re-adopting is the one thing that would duplicate every setting
 in it.

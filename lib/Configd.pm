@@ -200,7 +200,10 @@ sub build {
 Take a language's files over and wrap its service: move each file into its own
 fragment directory as C<00-original>, generate it, and install the drop-in.
 
-Returns a hashref of what happened, which is what the command line prints.
+Returns a hashref of what happened, which is what the command line prints.  Its
+C<services> is what to restart, which is not always what the drop-in went on --
+see L<Configd::Language/services()>.
+
 Safe to run again: a file already adopted is regenerated rather than adopted a
 second time, and re-adopting is the one thing that would duplicate every setting
 in it.
@@ -218,9 +221,9 @@ sub adopt {
     my $unit     = Configd::Unit->new( language => $language, %opts );
 
     return {
-        adopted => \@adopted,
-        dropins => [ $unit->install() ],
-        units   => [ $language->services() ],
+        adopted  => \@adopted,
+        dropins  => [ $unit->install() ],
+        services => [ $language->services() ],
     };
 }
 
@@ -244,7 +247,7 @@ sub release {
     return {
         dropins  => [ $unit->uninstall() ],
         released => [ $language->release() ],
-        units    => [ $language->services() ],
+        services => [ $language->services() ],
     };
 }
 
