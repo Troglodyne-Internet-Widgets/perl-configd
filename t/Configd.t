@@ -13,11 +13,11 @@ service and handing it all back
 =cut
 
 use Test::More;
-use Test::Fatal   qw{exception};
-use File::Path    qw{make_path};
-use File::Temp    qw{tempdir};
+use Test::Fatal qw{exception};
 
 use FindBin::libs;
+
+use Test::Configd qw{scratch fragment};
 
 use Configd();
 use Configd::Unit();
@@ -25,37 +25,6 @@ use Configd::Language();
 use Configd::Language::opendkim();     ## no critic (ProhibitUnusedImports)
 use Configd::Language::opendmarc();    ## no critic (ProhibitUnusedImports)
 use Configd::Language::redis();        ## no critic (ProhibitUnusedImports)
-
-# A root to work in, with a main.cf in it that looks like the one a freshly
-# installed postfix has.
-sub scratch {
-    my $root = tempdir( CLEANUP => 1 );
-    make_path("$root/etc/postfix");
-
-    Configd::Language::spew( "$root/etc/postfix/main.cf", <<'CF' );
-# See /usr/share/postfix/main.cf.dist for a commented, fuller version.
-myhostname = mail.example.com
-mydestination = $myhostname, localhost
-smtpd_recipient_restrictions = permit_mynetworks, reject_unauth_destination
-CF
-
-    Configd::Language::spew( "$root/etc/postfix/master.cf", <<'CF' );
-# service type  private unpriv  chroot  wakeup  maxproc command
-smtp      inet  n       -       y       -       -       smtpd
-CF
-
-    chmod 0o644, "$root/etc/postfix/main.cf";
-    chmod 0o600, "$root/etc/postfix/master.cf";
-
-    return $root;
-}
-
-sub fragment {
-    my ( $root, $file, $name, $text ) = @_;
-    make_path("$root/etc/postfix/$file.d");
-    Configd::Language::spew( "$root/etc/postfix/$file.d/$name", $text );
-    return;
-}
 
 subtest 'adopting a file keeps what was in it' => sub {
     my $root = scratch();
