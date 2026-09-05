@@ -46,7 +46,7 @@ key, and configd keeps whatever mode it found.
 =cut
 
 sub files {
-    return ( { path => '/etc/opendkim.conf', mode => 0o600 } );
+    return ( { path => '/etc/opendkim.conf', mode => 0o600, owner => 'opendkim:opendkim' } );
 }
 
 sub units {

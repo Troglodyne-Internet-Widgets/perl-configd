@@ -22,6 +22,9 @@ use FindBin::libs;
 use Configd();
 use Configd::Unit();
 use Configd::Language();
+use Configd::Language::opendkim();     ## no critic (ProhibitUnusedImports)
+use Configd::Language::opendmarc();    ## no critic (ProhibitUnusedImports)
+use Configd::Language::redis();        ## no critic (ProhibitUnusedImports)
 
 # A root to work in, with a main.cf in it that looks like the one a freshly
 # installed postfix has.
@@ -180,6 +183,43 @@ subtest 'a file keeps the permissions it had' => sub {
     Configd->release( 'postfix', root => $root );
     is( ( stat "$root/etc/postfix/main.cf" )[2] & 0o7777,   0o644, 'main.cf is 0644 again after releasing' );
     is( ( stat "$root/etc/postfix/master.cf" )[2] & 0o7777, 0o600, 'and master.cf is still 0600' );
+};
+
+subtest 'a file created from nothing gets the owner its language names' => sub {
+    my $root = scratch();
+
+    # The case that matters: a service running as its own user, owning its own
+    # config.  Recreated as root it does not lose a setting -- opendkim and
+    # opendmarc cannot read the file at all, and do not start.
+    my ($file) = Configd->language( 'opendmarc', root => $root )->files();
+    is( $file->{owner}, 'opendmarc:opendmarc', 'opendmarc names its own account' );
+
+    ($file) = Configd->language( 'opendkim', root => $root )->files();
+    is( $file->{owner}, 'opendkim:opendkim', 'and so does opendkim' );
+
+    ($file) = Configd->language( 'redis', root => $root )->files();
+    is( $file->{owner}, 'root:redis', 'redis.conf is root:redis, the way the package ships it' );
+
+    # Every language has to answer this, because the field did nothing at all
+    # until a guest turned up where it mattered.
+    foreach my $name ( Configd->languages() ) {
+        foreach my $each ( Configd->language( $name, root => $root )->files() ) {
+            ok( defined $each->{owner}, "$name says who owns $each->{path}" );
+        }
+    }
+
+    # And the field has to be read, not just declared.  Chowning to an account
+    # that does not exist here would need root, so this checks the parse and
+    # that a missing account is not fatal -- building under --root for a guest
+    # this machine is not is the normal case for that.
+    my $made = "$root/etc/made-from-nothing.conf";
+    is( Configd::Language::spew( $made, "x\n", 0o600, 'nosuchuser:nosuchgroup' ), $made, 'an unknown account is not an error' );
+    is( ( stat $made )[2] & 0o7777, 0o600, 'and the mode asked for is applied' );
+
+    my $kept = "$root/etc/postfix/main.cf";
+    chmod 0o640, $kept;
+    Configd::Language::spew( $kept, "y\n", 0o600, 'nosuchuser:nosuchgroup' );
+    is( ( stat $kept )[2] & 0o7777, 0o640, 'a file that already existed keeps its mode, owner ignored' );
 };
 
 subtest 'the drop-in is what makes the file true' => sub {

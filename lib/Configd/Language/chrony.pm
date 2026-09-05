@@ -74,7 +74,7 @@ my %REPEATS = map { $_ => 1 } qw{
 };
 
 sub files {
-    return ( { path => '/etc/chrony/chrony.conf', mode => 0o644 } );
+    return ( { path => '/etc/chrony/chrony.conf', mode => 0o644, owner => 'root:root' } );
 }
 
 sub units {

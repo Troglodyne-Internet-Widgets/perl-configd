@@ -88,7 +88,7 @@ sub files {
 
     # 0640 root:redis as the package ships it, but configd keeps whatever it
     # finds; this is only what a file created from nothing would get.
-    return ( { path => '/etc/redis/redis.conf', mode => 0o640 } );
+    return ( { path => '/etc/redis/redis.conf', mode => 0o640, owner => 'root:redis' } );
 }
 
 sub units {

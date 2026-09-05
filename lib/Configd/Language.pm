@@ -90,14 +90,20 @@ literals want; nothing here needs more than that.
 
 =head2 slurp($path)
 
-=head2 spew($path, $text, $mode)
+=head2 spew($path, $text, $mode, $owner)
 
 C<spew> writes through a temporary file in the same directory and renames over
 the target, so a daemon reading at that moment gets the old file or the new one
 and never half of either.
 
-A file that was already there keeps the mode and ownership it had; a new one is
-created C<$mode>, or 0644.  This belongs here rather than in the callers because
+A file that was already there keeps the mode and ownership it had.  A new one is
+created C<$mode>, or 0644, and owned by C<$owner> -- C<"user:group"> -- if one is
+given and the account exists.
+
+C<$owner> matters more than it looks.  A service that runs as its own user and
+owns its own config, as opendkim and opendmarc both do, cannot read that config
+if it is recreated as root: it does not fail to load a setting, it fails to
+start.  This belongs here rather than in the callers because
 C<File::Temp> makes its file 0600 and the rename carries that onto the target --
 so every path that writes a config file would otherwise have to remember to put
 the permissions back, and the one that forgot was C<release>, which handed a
@@ -115,7 +121,7 @@ sub slurp {
 }
 
 sub spew {
-    my ( $path, $text, $mode ) = @_;
+    my ( $path, $text, $mode, $owner ) = @_;
 
     my @was = stat $path;
 
@@ -136,7 +142,19 @@ sub spew {
     };
 
     chmod( ( @was ? $was[2] & 0o7777 : $mode // 0o644 ), $path );
-    chown( $was[4], $was[5], $path ) if @was;
+
+    if (@was) {
+        chown( $was[4], $was[5], $path );
+    }
+    elsif ( defined $owner ) {
+        my ( $user, $group ) = split( q{:}, $owner );
+        my $uid = defined $user  && length $user  ? getpwnam($user)  : undef;
+        my $gid = defined $group && length $group ? getgrnam($group) : undef;
+
+        # An account that is not there is not an error: the file is being built
+        # somewhere the service is not installed, which is what --root is for.
+        chown( $uid // -1, $gid // -1, $path );
+    }
 
     return $path;
 }
@@ -150,9 +168,13 @@ The files this language manages, as a list of hashrefs:
     { path => '/etc/postfix/main.cf', owner => 'root:root', mode => 0644 }
 
 C<path> is the generated file; its fragment directory is C<path> with C<.d>
-appended.  C<mode> is what a generated file is created as when there was nothing there
-before.  A file that already exists keeps the mode and ownership it had, so
-adopting one never loosens it.
+appended.  C<mode> and C<owner> are what a generated file is created as when there was
+nothing there before; C<owner> is C<"user:group">.  A file that already exists
+keeps the mode and ownership it had, so adopting one never changes either.
+
+Give C<owner> whenever the service runs as its own user and owns its config.
+Recreated as root, such a file does not lose a setting -- the daemon cannot read
+it at all, and does not start.
 
 =cut
 
@@ -503,7 +525,7 @@ sub write {
     # spew keeps whatever the file already was: postfix's master.cf is 0600 on a
     # mail server set up properly, and handing that back to 0644 while "just
     # regenerating a file" is not something anybody would go looking for.
-    spew( $target, $wanted, $file->{mode} );
+    spew( $target, $wanted, $file->{mode}, $file->{owner} );
 
     return 1;
 }

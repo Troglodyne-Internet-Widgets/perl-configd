@@ -42,7 +42,7 @@ directive, some whitespace, and the rest of the line.
 =cut
 
 sub files {
-    return ( { path => '/etc/opendmarc.conf', mode => 0o600 } );
+    return ( { path => '/etc/opendmarc.conf', mode => 0o600, owner => 'opendmarc:opendmarc' } );
 }
 
 sub units {
