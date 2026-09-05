@@ -2,16 +2,16 @@ package Configd::Unit;
 
 #ABSTRACT: The systemd drop-in that rebuilds a language's files before the daemon reads them.
 
-use 5.041;
+use 5.034;
 
 use strict;
 use warnings FATAL => 'all';
 
 use re '/aa';
 
-use File::Path        qw{make_path remove_tree};
-use File::Slurper     ();
-use File::Slurper::Temp();
+use File::Path qw{make_path};
+
+use Configd::Language();
 
 =head1 NAME
 
@@ -151,10 +151,10 @@ sub install {
 
         make_path($dir) unless -d $dir;
 
-        my $current = -f $path ? File::Slurper::read_text($path) : undef;    ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
+        my $current = -f $path ? Configd::Language::slurp($path) : undef;    ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
         next if defined $current && $current eq $wanted;
 
-        File::Slurper::Temp::write_text( $path, $wanted );
+        Configd::Language::spew( $path, $wanted );
         push @written, $path;
     }
 

@@ -2,7 +2,7 @@ package Configd::Language::postfix;
 
 #ABSTRACT: main.cf and master.cf, which postfix has never had a conf.d for.
 
-use 5.041;
+use 5.034;
 
 use strict;
 use warnings FATAL => 'all';
@@ -112,6 +112,10 @@ C<main.cf> and C<master.cf>.
 
 C<postfix@.service>, the templated unit.
 
+=head2 services()
+
+C<postfix.service>, which is what can actually be restarted.
+
 =cut
 
 sub files {
@@ -129,6 +133,15 @@ sub units {
     # postfix@-.service being the default one.  Naming the template covers every
     # instance, including ones somebody adds later.
     return ('postfix@.service');
+}
+
+sub services {
+
+    # Not the template: systemctl refuses to restart one, because a template is
+    # not a thing that runs.  postfix.service is the wrapper the package enables
+    # and every instance is PartOf it, so restarting it takes the instances with
+    # it -- which is what the packaging intends you to do.
+    return ('postfix.service');
 }
 
 =head2 accumulates($key)

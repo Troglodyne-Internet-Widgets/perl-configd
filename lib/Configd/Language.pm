@@ -2,16 +2,16 @@ package Configd::Language;
 
 #ABSTRACT: Base class for the languages: how one config file format is read, merged and written back.
 
-use 5.041;
+use 5.034;
 
 use strict;
 use warnings FATAL => 'all';
 
 use re '/aa';
 
-use File::Path        qw{make_path};
-use File::Slurper     ();
-use File::Slurper::Temp();
+use File::Basename ();
+use File::Path     qw{make_path};
+use File::Temp     ();
 
 =head1 NAME
 
@@ -66,6 +66,72 @@ administrator had done to it, become the first fragment and keep winning
 wherever nothing later has an opinion.  That is also what makes adoption
 reversible: put C<00-original> back and remove the drop-in.
 
+=head1 READING AND WRITING
+
+Done with core Perl rather than the usual conveniences.  This runs from
+C<ExecStartPre>, so it stands between a service and starting: a dependency that
+has to be installed first is a service that does not come up on a fresh guest.
+
+For the same reason this distribution asks for perl 5.34 rather than the 5.41
+the rest of the fleet is written against.  The perl that runs it is whichever one
+the guest already has -- Ubuntu 24.04 ships 5.38, 22.04 ships 5.34 -- and a
+config generator that needs a newer perl installed before it can generate a
+config is no use on the machines that most need it.  5.34 is what C<0oNNN> octal
+literals want; nothing here needs more than that.
+
+=head2 slurp($path)
+
+=head2 spew($path, $text, $mode)
+
+C<spew> writes through a temporary file in the same directory and renames over
+the target, so a daemon reading at that moment gets the old file or the new one
+and never half of either.
+
+A file that was already there keeps the mode and ownership it had; a new one is
+created C<$mode>, or 0644.  This belongs here rather than in the callers because
+C<File::Temp> makes its file 0600 and the rename carries that onto the target --
+so every path that writes a config file would otherwise have to remember to put
+the permissions back, and the one that forgot was C<release>, which handed a
+0644 main.cf back as 0600.
+
+=cut
+
+sub slurp {
+    my ($path) = @_;
+    open( my $fh, '<:encoding(UTF-8)', $path ) or die "Could not read $path: $!\n";
+    local $/ = undef;
+    my $text = <$fh>;
+    close $fh;
+    return $text // q{};
+}
+
+sub spew {
+    my ( $path, $text, $mode ) = @_;
+
+    my @was = stat $path;
+
+    # fileparse gives back (name, directory, suffix); it is the directory we
+    # want, so that the rename below is within one filesystem and therefore
+    # atomic.
+    my ( undef, $dir ) = File::Basename::fileparse($path);
+    my ( $fh, $temp )  = File::Temp::tempfile( '.configd-XXXXXX', DIR => $dir );
+
+    binmode( $fh, ':encoding(UTF-8)' );
+    print {$fh} $text or die "Could not write $temp: $!\n";
+    close $fh or die "Could not write $temp: $!\n";
+
+    rename( $temp, $path ) or do {
+        my $error = $!;
+        unlink $temp;
+        die "Could not put $temp in place as $path: $error\n";
+    };
+
+    chmod( ( @was ? $was[2] & 0o7777 : $mode // 0o644 ), $path );
+    chown( $was[4], $was[5], $path ) if @was;
+
+    return $path;
+}
+
 =head1 METHODS TO OVERRIDE
 
 =head2 files()
@@ -75,8 +141,9 @@ The files this language manages, as a list of hashrefs:
     { path => '/etc/postfix/main.cf', owner => 'root:root', mode => 0644 }
 
 C<path> is the generated file; its fragment directory is C<path> with C<.d>
-appended.  C<owner> and C<mode> are what the generated file is written as, and
-default to C<root:root> and 0644.
+appended.  C<mode> is what a generated file is created as when there was nothing there
+before.  A file that already exists keeps the mode and ownership it had, so
+adopting one never loosens it.
 
 =cut
 
@@ -86,15 +153,35 @@ sub files {
 
 =head2 units()
 
-The systemd units that read these files, as a list of names.
+The systemd units to install the drop-in on, as a list of names.
 
 A templated unit is named with the C<@> and no instance -- C<postfix@.service>
--- so the drop-in applies to every instance of it.
+-- so that the drop-in applies to every instance of it.
 
 =cut
 
 sub units {
     return ();
+}
+
+=head2 services()
+
+The units to actually restart once the drop-in is in place.
+
+Usually the same ones, which is the default.  They come apart when the drop-in
+belongs on a template: C<systemctl try-restart postfix@.service> is refused,
+because a template is not a thing that runs --
+
+    Unit name postfix@.service is missing the instance name.
+
+-- so the drop-in goes on the template and the restart goes to whatever unit
+actually has a process behind it.
+
+=cut
+
+sub services {
+    my ($self) = @_;
+    return $self->units();
 }
 
 =head2 parse($text)
@@ -278,9 +365,11 @@ sub merge {
             }
 
             if ( $self->accumulates($key) ) {
+                my $separator = $self->separator($key);
                 $by_key{$key}{value} = join(
-                    $self->separator($key),
-                    grep { defined && length } $by_key{$key}{value}, $directive->{value}
+                    $separator,
+                    grep { defined && length }
+                      map { _trim( $_, $separator ) } $by_key{$key}{value}, $directive->{value}
                 );
                 next;
             }
@@ -291,6 +380,21 @@ sub merge {
     }
 
     return [ map { $by_key{$_} } @order ];
+}
+
+# A value that already ends in the separator is common -- postfix's own
+# mydestination is written over several lines and the last one keeps its comma
+# -- and joining onto it gives ",, " which postfix reads but nobody meant.
+sub _trim {
+    my ( $value, $separator ) = @_;
+    return $value unless defined $value;
+
+    my $punctuation = $separator =~ s/\s+//gr;
+    my $class       = length $punctuation ? "[\\s\Q$punctuation\E]" : '\\s';
+
+    $value =~ s/\A$class+//;
+    $value =~ s/$class+\z//;
+    return $value;
 }
 
 =head2 $language->build($file)
@@ -304,7 +408,7 @@ sub build {
 
     my @sets;
     foreach my $fragment ( $self->fragments($file) ) {
-        push @sets, $self->parse( File::Slurper::read_text($fragment) );
+        push @sets, $self->parse( slurp($fragment) );
     }
 
     return $self->emit( $self->merge(@sets) );
@@ -355,11 +459,13 @@ sub write {
     my $target = $self->path( $file->{path} );
     my $wanted = $self->header($file) . $self->build($file);
 
-    my $current = -f $target ? File::Slurper::read_text($target) : undef;    ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
+    my $current = -e $target ? slurp($target) : undef;
     return 0 if defined $current && $current eq $wanted;
 
-    File::Slurper::Temp::write_text( $target, $wanted );
-    chmod( $file->{mode} // 0644, $target );
+    # spew keeps whatever the file already was: postfix's master.cf is 0600 on a
+    # mail server set up properly, and handing that back to 0644 while "just
+    # regenerating a file" is not something anybody would go looking for.
+    spew( $target, $wanted, $file->{mode} );
 
     return 1;
 }
@@ -392,10 +498,10 @@ sub adopt {
         }
 
         if ( -f $target ) {                                                  ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
-            File::Slurper::Temp::write_text( $original, File::Slurper::read_text($target) );
+            spew( $original, slurp($target) );
         }
         else {
-            File::Slurper::Temp::write_text( $original, q{} );
+            spew( $original, q{} );
         }
 
         $self->write($file);
@@ -422,7 +528,7 @@ sub release {
         my $original = $self->fragment_dir($file) . '/00-original';
         next unless -f $original;                                            ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
 
-        File::Slurper::Temp::write_text( $self->path( $file->{path} ), File::Slurper::read_text($original) );
+        spew( $self->path( $file->{path} ), slurp($original) );
         push @released, $file->{path};
     }
 

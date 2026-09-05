@@ -128,11 +128,35 @@ arrived with.
 long enough to test something, short enough that nobody comes to rely on it. The
 header on the file says so.
 
+## Requirements
+
+Core perl 5.34 or newer, and nothing else. Deliberately: this runs from
+`ExecStartPre`, so it stands between a service and starting, and it has to work
+on whatever perl the guest already has rather than one somebody installed first.
+That is a lower bar than the rest of the fleet, which is written against 5.41.
+
 ## Status
 
-Early. Postfix is implemented and tested; the languages that would come next are
-the other monolithic-config software in the fleet — `/etc/default/grub` and
-`redis.conf` among them.
+Early, but exercised against a real machine: an Ubuntu 24.04 guest running
+postfix 3.8.6, provisioned by trog-provisioner's `mail` recipe.
 
-The systemd behaviour is the part that most wants a real machine under it: the
-tests cover what is written and where, but not what systemd then does with it.
+Adopting its 64-line `main.cf` changed **no setting** — `postconf -n` was
+byte-identical before and after — and `postfix check` stayed clean. Dropping a
+second and third domain's fragment in and doing nothing but `systemctl restart
+postfix` and `systemctl reload postfix` produced a `mydestination` carrying all
+of them, and the server went on answering SMTP throughout.
+
+Four things that only a real machine found, all fixed:
+
+* `systemctl try-restart postfix@.service` is refused — a template is not a
+  thing that runs. The drop-in belongs on the template, the restart belongs on
+  `postfix.service`; those are now separate questions (`units` and `services`).
+* `master.cf` is 0600 on a properly set up mail server. A rename puts the
+  temporary file's permissions on the target, so regenerating loosened it.
+* The same bug on the way back out: `release` handed a 0644 `main.cf` back as
+  0600. Permission preservation now lives in `spew`, so every caller gets it.
+* `mydestination` in postfix's own `main.cf` ends with a trailing comma, so
+  joining onto it produced `,,`.
+
+Next would be the other monolithic configs in the fleet — `/etc/default/grub`
+and `redis.conf` among them.

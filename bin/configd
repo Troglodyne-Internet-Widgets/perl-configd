@@ -5,14 +5,23 @@ package Configd::Bin::Configd;
 # PODNAME: configd
 # ABSTRACT: Adopt a config file that has no conf.d, and keep it generated.
 
-use 5.041;
+use 5.034;
 
 use strict;
 use warnings FATAL => 'all';
 
 use re '/aa';
 
-use FindBin::libs;
+use FindBin;
+
+# Not FindBin::libs, which is not core: this has to run from a checkout on a
+# guest where nothing has been installed yet, and from ExecStartPre where there
+# is nobody to install it.
+#
+# RealBin rather than Bin, because the way it gets onto a guest is a symlink
+# from /usr/bin -- systemd wants an absolute path in ExecStartPre and /usr/bin
+# is where one lives.  Bin would be /usr/bin, and ../lib would be /usr/lib.
+use lib "$FindBin::RealBin/../lib";    ## no critic (Freenode::ProhibitUseLib, ProhibitUseLib)
 
 use Getopt::Long qw{GetOptionsFromArray};
 use Pod::Usage   qw{pod2usage};

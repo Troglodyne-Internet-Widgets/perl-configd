@@ -2,7 +2,7 @@ package Configd;
 
 #ABSTRACT: Give software without a conf.d one anyway.
 
-use 5.041;
+use 5.034;
 
 use strict;
 use warnings FATAL => 'all';
@@ -149,7 +149,7 @@ sub adopt {
     return {
         adopted => \@adopted,
         dropins => [ $unit->install() ],
-        units   => [ $language->units() ],
+        units   => [ $language->services() ],
     };
 }
 
@@ -173,7 +173,7 @@ sub release {
     return {
         dropins  => [ $unit->uninstall() ],
         released => [ $language->release() ],
-        units    => [ $language->units() ],
+        units    => [ $language->services() ],
     };
 }
 

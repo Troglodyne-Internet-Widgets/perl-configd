@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use 5.041;
+use 5.034;
 
 use strict;
 use warnings FATAL => 'all';
@@ -81,6 +81,24 @@ subtest 'two domains on one mail server both stay local' => sub {
         value_of( $merged, 'virtual_mailbox_domains' ),
         'first.example.com, second.example.com',
         'the same for the other lists, joined the way postfix reads them'
+    );
+};
+
+subtest 'a value that already ends in a separator does not get two' => sub {
+    # postfix's own main.cf writes mydestination over several lines and the last
+    # one keeps its trailing comma.  Joining onto that gives ",," -- which
+    # postfix reads without complaint, so nothing would ever tell you.
+    my $merged = $postfix->merge(
+        $postfix->parse("mydestination = \$myhostname, localhost, www.example.com,\n"),
+        $postfix->parse("mydestination = second.example.com\n"),
+    );
+
+    my $destination = value_of( $merged, 'mydestination' );
+    unlike( $destination, qr/,\s*,/, 'no doubled separator' );
+    is(
+        $destination,
+        '$myhostname, localhost, www.example.com, second.example.com',
+        'just the one between each pair'
     );
 };
 
