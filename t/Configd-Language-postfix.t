@@ -197,4 +197,32 @@ subtest 'a line that is neither is refused rather than dropped' => sub {
     );
 };
 
+subtest 'the map parameters two domains each name a table for' => sub {
+
+    # smtpd_sender_login_maps most of all: reject_authenticated_sender_login_mismatch
+    # reads it, so a host where it does not accumulate names one domain's table
+    # and refuses every other domain's users when they try to send.
+    foreach my $key (
+        qw{
+        virtual_mailbox_maps virtual_alias_maps transport_maps
+        sender_dependent_relayhost_maps smtpd_sender_login_maps
+        }
+    ) {
+        ok( $postfix->accumulates($key), "$key accumulates" );
+
+        my $merged = $postfix->merge(
+            $postfix->parse("$key = hash:/etc/postfix/domains/first.example.com/t\n"),
+            $postfix->parse("$key = hash:/etc/postfix/domains/second.example.com/t\n"),
+        );
+        is(
+            value_of( $merged, $key ),
+            'hash:/etc/postfix/domains/first.example.com/t, hash:/etc/postfix/domains/second.example.com/t',
+            "and two domains' tables both survive $key"
+        );
+    }
+
+    # The restriction lists still must not, whatever else does.
+    ok( !$postfix->accumulates('smtpd_recipient_restrictions'), 'a restriction list still does not' );
+};
+
 done_testing();

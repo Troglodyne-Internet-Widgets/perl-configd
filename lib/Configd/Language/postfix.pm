@@ -94,6 +94,8 @@ my %ACCUMULATES = map { $_ => 1 } qw{
   nested_header_checks
   alias_maps
   alias_database
+  sender_dependent_relayhost_maps
+  smtpd_sender_login_maps
   smtpd_milters
   non_smtpd_milters
   inet_interfaces
@@ -101,6 +103,13 @@ my %ACCUMULATES = map { $_ => 1 } qw{
 };
 
 =pod
+
+C<sender_dependent_relayhost_maps> and C<smtpd_sender_login_maps> are here for
+the same reason as the rest and were missed the first time, which is worth
+naming because the second one fails dangerously.  It is what
+C<reject_authenticated_sender_login_mismatch> reads, so a host where it does not
+accumulate ends up naming one domain's table -- and every other domain's users,
+whose addresses are then owned by nobody, are refused when they try to send.
 
 The parameters postfix documents as comma-or-space separated lists, where two
 fragments each naming a domain, a map or a milter both meant it:

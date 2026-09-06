@@ -1,5 +1,16 @@
 Revision history for Configd
 
+0.002 2026-09-06 TEODESIAN
+    - postfix: accumulate sender_dependent_relayhost_maps and
+      smtpd_sender_login_maps, which are lists of lookup tables like the rest of
+      the *_maps family and were missed.  Not accumulating the second one is
+      dangerous rather than merely wrong: it is what
+      reject_authenticated_sender_login_mismatch reads, so a host with two
+      domains ends up naming one domain's table and refuses the other domain's
+      users when they send.
+    - postfix: document what adopting main.cf does not reach -- the lookup
+      tables it names, and what to do about the ones behind a restriction list.
+
 0.001 2026-09-05 TEODESIAN
     - Initial Release
     - Languages: postfix (main.cf, master.cf), opendkim, opendmarc, redis
