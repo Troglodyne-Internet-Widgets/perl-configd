@@ -115,6 +115,61 @@ for -- a C<permit_> landing ahead of a check that was supposed to run first is
 an open relay.  Two fragments disagreeing about a restriction list is something
 a person should look at.
 
+=head1 WHAT THIS DOES NOT REACH: THE LOOKUP TABLES
+
+main.cf is full of paths, and none of them are this language's business.
+C<virtual_mailbox_maps> names a file of addresses; C<header_checks> names a file
+of patterns; C<check_recipient_access> names one from inside a restriction list.
+Adopting main.cf merges the parameters that B<name> those tables and does
+nothing whatever to the tables themselves, which is worth saying out loud
+because the parameter merging cleanly is exactly what makes it easy to believe
+the problem is solved.
+
+Where the parameter accumulates the tables come along for free, because postfix
+searches a list of them in order.  Two domains each writing their own file and
+each naming it is enough:
+
+    # 50-first.example.com
+    virtual_mailbox_maps = hash:/etc/postfix/virtual/first.example.com
+
+    # 50-second.example.com
+    virtual_mailbox_maps = hash:/etc/postfix/virtual/second.example.com
+
+That is the whole answer for C<virtual_mailbox_maps>, C<virtual_alias_maps>,
+C<transport_maps>, C<header_checks> and the rest of the accumulating list, and
+it needs nothing from this distribution.
+
+It is B<not> available for a table named from inside a restriction list.
+C<check_recipient_access pcre:/etc/postfix/recipient_access> lives inside
+C<smtpd_recipient_restrictions>, which does not accumulate and must not, so the
+path in it is whatever the last fragment to mention that parameter said.  Every
+domain therefore shares one table, and the second one provisioned overwrites the
+first one's -- the same failure adopting main.cf was meant to end, one level
+down and out of reach.
+
+Two things follow, and both are the caller's rather than this language's:
+
+=over 4
+
+=item * A shared table has to be B<assembled> rather than merged, because these
+are ordered files.  A pcre or regexp table is read top to bottom and the first
+match wins, so a catch-all belongs at the end and concatenating two domains'
+tables puts one in the middle.  Numeric prefixes on the fragments, and the
+catch-all last, is the shape that works -- the same shape configd gives a config
+file, which is not a coincidence but is not implemented here either.
+
+=item * Before building any of that, check whether the table is needed at all.
+Postfix rejects a recipient in a virtual mailbox domain that is absent from
+C<virtual_mailbox_maps> by itself -- "User unknown in virtual mailbox table" --
+and one in a local domain absent from C<local_recipient_maps> likewise, so an
+access table written to reject unknown recipients is often restating a check
+postfix already makes, and is only load-bearing because the configuration has a
+domain in two address classes at once.  L<https://www.postfix.org/ADDRESS_CLASS_README.html>
+is the page; C<VIRTUAL_README> is blunter about it: "NEVER list a virtual
+MAILBOX domain name as a mydestination domain!"
+
+=back
+
 =head1 METHODS
 
 =head2 files()
