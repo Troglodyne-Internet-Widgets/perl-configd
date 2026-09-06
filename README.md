@@ -4,7 +4,7 @@ Configd - Give software without a conf.d one anyway.
 
 # VERSION
 
-version 0.001
+version 0.002
 
 # SYNOPSIS
 
