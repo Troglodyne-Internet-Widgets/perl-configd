@@ -173,12 +173,12 @@ sub spew {
     # fileparse gives back (name, directory, suffix); it is the directory we
     # want, so that the rename below is within one filesystem and therefore
     # atomic.
-    my ( undef, $dir ) = File::Basename::fileparse($path);
-    my ( $fh, $temp )  = File::Temp::tempfile( '.configd-XXXXXX', DIR => $dir );
+    my ( undef, $dir )  = File::Basename::fileparse($path);
+    my ( $fh,   $temp ) = File::Temp::tempfile( '.configd-XXXXXX', DIR => $dir );
 
     binmode( $fh, ':encoding(UTF-8)' );
     print {$fh} $text or die "Could not write $temp: $!\n";
-    close $fh or die "Could not write $temp: $!\n";
+    close $fh         or die "Could not write $temp: $!\n";
 
     rename( $temp, $path ) or do {
         my $error = $!;
@@ -389,7 +389,7 @@ sub new {
     my ( $class, %opts ) = @_;
     $opts{root} //= q{};
     $opts{root} =~ s{/\z}{};
-    return bless { %opts }, $class;
+    return bless {%opts}, $class;
 }
 
 =head2 $language->name()
@@ -504,7 +504,7 @@ sub merge {
 
             if ( !exists $by_key{$key} ) {
                 push @order, $key;
-                $by_key{$key} = { %$directive };
+                $by_key{$key} = {%$directive};
                 next;
             }
 
@@ -519,7 +519,7 @@ sub merge {
             }
 
             # The later fragment is the one that meant it.
-            $by_key{$key} = { %$directive };
+            $by_key{$key} = {%$directive};
         }
     }
 
@@ -645,7 +645,7 @@ sub adopt {
 
         # Already ours.  Re-adopting would take the file we generated last time
         # and make it the first fragment, which duplicates every setting in it.
-        if ( -f $original ) {                                                ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
+        if ( -f $original ) {    ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
             $self->write($file);
             next;
         }
@@ -685,7 +685,7 @@ sub release {
     my @released;
     foreach my $file ( $self->files() ) {
         my $original = $self->fragment_dir($file) . '/00-original';
-        next unless -f $original;                                            ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
+        next unless -f $original;    ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
 
         spew( $self->path( $file->{path} ), slurp($original) );
         push @released, $file->{path};

@@ -62,6 +62,7 @@ subtest 'a parameter said twice is the later one' => sub {
 };
 
 subtest 'two domains on one mail server both stay local' => sub {
+
     # The case the whole distribution exists for.  postconf -e sets
     # mydestination, so provisioning the second domain onto a server that
     # already hosts the first replaces it -- and mail for the first domain
@@ -75,7 +76,7 @@ subtest 'two domains on one mail server both stay local' => sub {
     my $destination = value_of( $merged, 'mydestination' );
     like( $destination, qr/\Qfirst.example.com\E/,  'the first domain is still there' );
     like( $destination, qr/\Qsecond.example.com\E/, 'and so is the second' );
-    like( $destination, qr/\$myhostname/,        'and what was in main.cf to begin with' );
+    like( $destination, qr/\$myhostname/,           'and what was in main.cf to begin with' );
 
     is(
         value_of( $merged, 'virtual_mailbox_domains' ),
@@ -85,6 +86,7 @@ subtest 'two domains on one mail server both stay local' => sub {
 };
 
 subtest 'a value that already ends in a separator does not get two' => sub {
+
     # postfix's own main.cf writes mydestination over several lines and the last
     # one keeps its trailing comma.  Joining onto that gives ",," -- which
     # postfix reads without complaint, so nothing would ever tell you.
@@ -103,6 +105,7 @@ subtest 'a value that already ends in a separator does not get two' => sub {
 };
 
 subtest 'restriction lists are not joined, on purpose' => sub {
+
     # They are lists, but ordered ones where the order is the meaning.  Joining
     # two end to end gives something that parses and that neither fragment
     # asked for -- a permit_ ahead of a check that was meant to run first is an
@@ -164,11 +167,12 @@ subtest 'a service configured twice is the later one' => sub {
     );
 
     my ($smtp) = grep { defined $_->{key} && $_->{key} eq 'smtp/inet' } @$merged;
-    is( $smtp->{columns}[6], '1', 'the later entry replaces the earlier one' );
-    is( scalar( grep { defined $_->{key} } @$merged ), 1, 'rather than both being written' );
+    is( $smtp->{columns}[6],                           '1', 'the later entry replaces the earlier one' );
+    is( scalar( grep { defined $_->{key} } @$merged ), 1,   'rather than both being written' );
 };
 
 subtest 'which file a fragment is gets worked out from the fragment' => sub {
+
     # A filename would do it, except that fragments get named for the domain
     # that dropped them in rather than for the file they add to.
     ok( !$postfix->_is_master("mydestination = example.com\n"), 'a parameter is main.cf' );
@@ -177,6 +181,7 @@ subtest 'which file a fragment is gets worked out from the fragment' => sub {
 };
 
 subtest 'a line that is neither is refused rather than dropped' => sub {
+
     # Silently skipping it would generate a main.cf missing a setting somebody
     # wrote, and they would have no way of telling.
     like(

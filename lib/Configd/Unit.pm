@@ -113,7 +113,7 @@ sub new {
     $opts{root}    //= $opts{language}->root() // q{};
     $opts{root} =~ s{/\z}{};
 
-    return bless { %opts }, $class;
+    return bless {%opts}, $class;
 }
 
 =head2 $unit->dropin_dir($unit_name)

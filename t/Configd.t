@@ -81,6 +81,7 @@ subtest 'a second domain adds to the first rather than replacing it' => sub {
 };
 
 subtest 'adopting twice does not double anything' => sub {
+
     # The mistake to avoid: taking the file we generated last time and making it
     # the first fragment, which would duplicate every setting in it and grow the
     # file every run.
@@ -91,11 +92,12 @@ subtest 'adopting twice does not double anything' => sub {
     Configd->adopt( 'postfix', root => $root );
     my $twice = Configd::Language::slurp("$root/etc/postfix/main.cf");
 
-    is( $twice, $once, 'the generated file is the same' );
-    is( scalar( () = $twice =~ m/^myhostname =/mg ), 1, 'and says myhostname exactly once' );
+    is( $twice,                                      $once, 'the generated file is the same' );
+    is( scalar( () = $twice =~ m/^myhostname =/mg ), 1,     'and says myhostname exactly once' );
 };
 
 subtest 'building again when nothing changed touches nothing' => sub {
+
     # The unit runs this on every start and reload, so a build that always
     # rewrites would churn mtimes and defeat anything watching the file.
     my $root = scratch();
@@ -113,12 +115,12 @@ subtest 'the leavings of editors and package managers are not configuration' => 
     my $root = scratch();
     Configd->adopt( 'postfix', root => $root );
 
-    fragment( $root, 'main.cf', '50-real.cf',          "mydestination = real.example.com\n" );
-    fragment( $root, 'main.cf', '50-real.cf.bak',      "mydestination = stale.example.com\n" );
-    fragment( $root, 'main.cf', '50-old.cf.disabled',  "mydestination = disabled.example.com\n" );
-    fragment( $root, 'main.cf', '50-emacs.cf~',        "mydestination = emacs.example.com\n" );
-    fragment( $root, 'main.cf', '.hidden.cf',          "mydestination = hidden.example.com\n" );
-    fragment( $root, 'main.cf', '50-apt.cf.dpkg-old',  "mydestination = apt.example.com\n" );
+    fragment( $root, 'main.cf', '50-real.cf',         "mydestination = real.example.com\n" );
+    fragment( $root, 'main.cf', '50-real.cf.bak',     "mydestination = stale.example.com\n" );
+    fragment( $root, 'main.cf', '50-old.cf.disabled', "mydestination = disabled.example.com\n" );
+    fragment( $root, 'main.cf', '50-emacs.cf~',       "mydestination = emacs.example.com\n" );
+    fragment( $root, 'main.cf', '.hidden.cf',         "mydestination = hidden.example.com\n" );
+    fragment( $root, 'main.cf', '50-apt.cf.dpkg-old', "mydestination = apt.example.com\n" );
     Configd->build( 'postfix', root => $root );
 
     my ($destination) = Configd::Language::slurp("$root/etc/postfix/main.cf") =~ m/^mydestination = (.*)$/m;
@@ -183,7 +185,7 @@ subtest 'a file created from nothing gets the owner its language names' => sub {
     # this machine is not is the normal case for that.
     my $made = "$root/etc/made-from-nothing.conf";
     is( Configd::Language::spew( $made, "x\n", 0o600, 'nosuchuser:nosuchgroup' ), $made, 'an unknown account is not an error' );
-    is( ( stat $made )[2] & 0o7777, 0o600, 'and the mode asked for is applied' );
+    is( ( stat $made )[2] & 0o7777,                                               0o600, 'and the mode asked for is applied' );
 
     my $kept = "$root/etc/postfix/main.cf";
     chmod 0o640, $kept;
@@ -238,10 +240,14 @@ subtest 'a copy of a secret file is as secret as the file' => sub {
     chmod 0o600, "$root/etc/postfix/master.cf";
     Configd->adopt( 'postfix', root => $root );
 
-    is( ( stat "$root/etc/postfix/master.cf.d/00-original" )[2] & 0o7777,
-        0o600, 'master.cf.d/00-original is 0600, like the file it copies' );
-    is( ( stat "$root/etc/postfix/main.cf.d/00-original" )[2] & 0o7777,
-        0o644, 'and main.cf.d/00-original is 0644, like the file it copies' );
+    is(
+        ( stat "$root/etc/postfix/master.cf.d/00-original" )[2] & 0o7777,
+        0o600, 'master.cf.d/00-original is 0600, like the file it copies'
+    );
+    is(
+        ( stat "$root/etc/postfix/main.cf.d/00-original" )[2] & 0o7777,
+        0o644, 'and main.cf.d/00-original is 0644, like the file it copies'
+    );
 };
 
 subtest 'releasing puts the file back and lets go of the service' => sub {

@@ -192,7 +192,7 @@ sub _is_master {
     my ( $self, $text ) = @_;
 
     foreach my $line ( split( qq{\n}, $text ) ) {
-        next if $line =~ m/\A\s*(?:#|\z)/;
+        next     if $line =~ m/\A\s*(?:#|\z)/;
         return 0 if $line =~ m/\A\S+\s*=/;
         return 1 if $line =~ m/\A\S+\s+(?:inet|unix|unix-dgram|fifo|pass)\s/;
     }
@@ -215,7 +215,8 @@ sub _parse_main {
             # `param =` with the value on the lines below it is how postfix's
             # own main.cf writes the long ones, so the first continuation of an
             # empty value must not arrive with a space in front of it.
-            $directives[-1]{value} = length $directives[-1]{value}
+            $directives[-1]{value} =
+              length $directives[-1]{value}
               ? "$directives[-1]{value} $continued"
               : $continued;
             next;

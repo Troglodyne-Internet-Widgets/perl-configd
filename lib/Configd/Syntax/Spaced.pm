@@ -100,7 +100,8 @@ sub emit {
             next;
         }
 
-        $out .= length $directive->{value}
+        $out .=
+          length $directive->{value}
           ? "$directive->{key} $directive->{value}\n"
           : "$directive->{key}\n";
     }
