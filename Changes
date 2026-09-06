@@ -10,6 +10,12 @@ Revision history for Configd
       users when they send.
     - postfix: document what adopting main.cf does not reach -- the lookup
       tables it names, and what to do about the ones behind a restriction list.
+    - An empty value on an accumulating directive now resets it, the way a
+      systemd drop-in does.  Without it a fragment could only ever add to what
+      00-original held, and 00-original is sometimes wrong rather than
+      incomplete: a guest whose hostname is a domain it hosts has the package's
+      own mydestination naming a domain that must be a virtual mailbox domain
+      instead, postfix refuses to have it in both, and nothing could take it out.
 
 0.001 2026-09-05 TEODESIAN
     - Initial Release

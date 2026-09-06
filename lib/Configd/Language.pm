@@ -470,6 +470,21 @@ sub fragments {
 One list of directives out of several, applying C<accumulates> to decide which
 of two directives for the same key wins and which of them join up.
 
+An accumulating directive with an B<empty value> resets it: whatever earlier
+fragments put there is dropped, and anything after this adds to nothing rather
+than to that.  It is the one thing accumulation cannot otherwise say, since a
+fragment can add to what came before it and never take something out -- and
+C<00-original> is sometimes wrong rather than merely incomplete.  A guest whose
+hostname is a domain it hosts is the case that keeps coming up: the package's
+own C<mydestination> names that domain, the domain has to be a virtual mailbox
+domain instead, postfix will not have it in both, and no amount of adding fixes
+it.
+
+    mydestination =
+    mydestination = $myhostname, localhost
+
+systemd drop-ins spell it the same way, for the same reason.
+
 Order is the order the keys were first seen, so a generated file reads like the
 fragments that made it rather than like a hash.
 
@@ -509,6 +524,22 @@ sub merge {
             }
 
             if ( $self->accumulates($key) ) {
+
+                # An empty value resets rather than adding nothing, which is the
+                # one thing accumulation otherwise cannot express: a fragment can
+                # add to what came before it and never take anything out.  That
+                # matters where 00-original is wrong rather than merely
+                # incomplete -- a guest whose hostname is the domain it hosts has
+                # the package's own mydestination naming a domain that must be a
+                # virtual mailbox domain instead, and no amount of adding fixes
+                # it.  systemd drop-ins spell the same thing the same way, and
+                # for these parameters an empty value is what postfix reads it
+                # as anyway.
+                if ( !length( $directive->{value} // q{} ) ) {
+                    $by_key{$key} = {%$directive};
+                    next;
+                }
+
                 my $separator = $self->separator($key);
                 $by_key{$key}{value} = join(
                     $separator,

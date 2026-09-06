@@ -225,4 +225,40 @@ subtest 'the map parameters two domains each name a table for' => sub {
     ok( !$postfix->accumulates('smtpd_recipient_restrictions'), 'a restriction list still does not' );
 };
 
+subtest 'an empty accumulating value resets what came before it' => sub {
+
+    # The case: a guest whose hostname is the domain it hosts.  The package's
+    # own main.cf then names that domain in mydestination, it has to be a
+    # virtual mailbox domain instead, and postfix will not have it in both --
+    # so a fragment has to be able to take something out, not only add.
+    my $merged = $postfix->merge(
+        $postfix->parse("mydestination = \$myhostname, mail.example.com, localhost.example.com, localhost\n"),
+        $postfix->parse("mydestination =\nmydestination = \$myhostname, localhost\n"),
+    );
+    is(
+        value_of( $merged, 'mydestination' ), '$myhostname, localhost',
+        'the reset drops it and what follows starts from nothing'
+    );
+
+    # And a later fragment still adds to what the reset left, so a reset is not
+    # a way of claiming the parameter for good.
+    $merged = $postfix->merge(
+        $postfix->parse("mydestination = old.example.com\n"),
+        $postfix->parse("mydestination =\nmydestination = localhost\n"),
+        $postfix->parse("mydestination = extra.example.com\n"),
+    );
+    is(
+        value_of( $merged, 'mydestination' ), 'localhost, extra.example.com',
+        'a fragment after the reset accumulates onto it'
+    );
+
+    # Only where the parameter accumulates: everywhere else an empty value is a
+    # value, and setting something to nothing is a thing people mean.
+    $merged = $postfix->merge(
+        $postfix->parse("relayhost = [smtp.example.com]\n"),
+        $postfix->parse("relayhost =\n"),
+    );
+    is( value_of( $merged, 'relayhost' ), '', 'an ordinary parameter set to empty is just empty' );
+};
+
 done_testing();
