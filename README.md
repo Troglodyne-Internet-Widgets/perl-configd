@@ -4,7 +4,7 @@ Configd - Give software without a conf.d one anyway.
 
 # VERSION
 
-version 0.002
+version 0.003
 
 # SYNOPSIS
 
@@ -183,6 +183,10 @@ feature.
 Current Maintainers:
 
 - George S. Baugh <george@troglodyne.net>
+
+# CONTRIBUTOR
+
+troglodyne-bot <morpheus@troglodyne.net>
 
 # COPYRIGHT AND LICENSE
 
