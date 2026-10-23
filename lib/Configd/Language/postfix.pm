@@ -235,6 +235,20 @@ sub accumulates {
     return $ACCUMULATES{$key} // 0;
 }
 
+=head2 @items = $language->combine($key, @items)
+
+C<all> alone for an C<inet_interfaces> that has C<all> among its items,
+because postfix refuses C<all> beside an address, and C<all> already listens
+on every address.  C<@items> as they are for anything else.
+
+=cut
+
+sub combine {
+    my ( $self, $key, @items ) = @_;
+    return 'all' if $key eq 'inet_interfaces' && grep { $_ eq 'all' } @items;
+    return @items;
+}
+
 =head2 parse($text)
 
 Read a fragment of either file.
