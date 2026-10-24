@@ -96,6 +96,8 @@ my %ACCUMULATES = map { $_ => 1 } qw{
   alias_database
   sender_dependent_relayhost_maps
   smtpd_sender_login_maps
+  smtp_sasl_password_maps
+  smtp_tls_policy_maps
   smtpd_milters
   non_smtpd_milters
   inet_interfaces
@@ -110,6 +112,12 @@ naming because the second one fails dangerously.  It is what
 C<reject_authenticated_sender_login_mismatch> reads, so a host where it does not
 accumulate ends up naming one domain's table -- and every other domain's users,
 whose addresses are then owned by nobody, are refused when they try to send.
+
+C<smtp_sasl_password_maps> and C<smtp_tls_policy_maps> were missed the same
+way.  A host that sends each domain's mail through a relay of its own, with
+C<smtp_sender_dependent_authentication>, names a table per domain in each.
+Where they do not accumulate, the mail of every domain but the last goes to
+its relay with no login and no TLS policy, and the relay refuses it.
 
 The parameters postfix documents as comma-or-space separated lists, where two
 fragments each naming a domain, a map or a milter both meant it:
