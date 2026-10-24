@@ -206,6 +206,7 @@ subtest 'the map parameters two domains each name a table for' => sub {
         qw{
         virtual_mailbox_maps virtual_alias_maps transport_maps
         sender_dependent_relayhost_maps smtpd_sender_login_maps
+        smtp_sasl_password_maps smtp_tls_policy_maps
         }
     ) {
         ok( $postfix->accumulates($key), "$key accumulates" );

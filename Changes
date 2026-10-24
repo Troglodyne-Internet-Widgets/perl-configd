@@ -1,5 +1,12 @@
 Revision history for Configd
 
+0.005 2026-10-24 TEODESIAN
+    - postfix: smtp_sasl_password_maps and smtp_tls_policy_maps accumulate.
+      A host that sends each mail domain through a relay of its own names a
+      table per domain in each.  The later fragment replaced the list, so the
+      mail of every domain but the last went to its relay with no login, and
+      the relay refused it.
+
 0.004 2026-10-23 TEODESIAN
     - opendmarc: TrustedAuthservIDs accumulates.  One opendmarc serves every
       mail domain on a host, and each domain's fragment names the ids that it
