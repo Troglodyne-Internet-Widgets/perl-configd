@@ -47,6 +47,21 @@ sub units {
     return ('opendmarc.service');
 }
 
+=head2 accumulates($key)
+
+True for C<TrustedAuthservIDs>, a comma-separated list.  One opendmarc
+serves every domain on the host, and each domain can name the ids that it
+trusts, so a later fragment adds to the list.  C<AuthservID> is one name, the
+one that opendmarc writes its own verdicts under, so the later fragment wins.
+The comma of the base class is the separator.
+
+=cut
+
+sub accumulates {
+    my ( $self, $key ) = @_;
+    return $key eq 'TrustedAuthservIDs';
+}
+
 =head1 SEE ALSO
 
 L<Configd::Language>, L<Configd::Syntax::Spaced>

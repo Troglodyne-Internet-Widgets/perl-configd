@@ -1,5 +1,11 @@
 Revision history for Configd
 
+0.004 2026-10-23 TEODESIAN
+    - opendmarc: TrustedAuthservIDs accumulates.  One opendmarc serves every
+      mail domain on a host, and each domain's fragment names the ids that it
+      trusts.  The later fragment replaced the list, so opendmarc trusted only
+      the last domain's ids.  AuthservID is still one value.
+
 0.003 2026-10-23 TEODESIAN
     - Accumulating directives now join as lists of items, not as strings.  An
       item that the list already holds is not added again, so a fragment that
