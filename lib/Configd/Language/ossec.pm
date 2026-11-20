@@ -9,6 +9,8 @@ use warnings FATAL => 'all';
 
 use re '/aa';
 
+use XML::LibXML ();
+
 use parent qw{Configd::Language};
 
 =head1 NAME
@@ -69,12 +71,20 @@ network of its author.
 
 Comments are left out of the generated file, as in every language.
 
-=head2 What it reads
+=head2 What it reads, and with what
 
-Elements, attributes in quotes, text and comments.  It is not a general XML
-parser, because configd runs on the core modules of the perl of the guest,
-which have none.  F<ossec.conf> uses nothing more, and a fragment that does,
-such as one with a CDATA section, dies with the place that it could not read.
+L<XML::LibXML>, the one module here that is not in core perl.  The rest of
+configd runs on core perl alone, because it stands between a service and its
+start.  This language needs a real parser, and only a guest that installs
+OSSEC has F<ossec.conf> to adopt, so the same install brings the parser:
+F<libxml-libxml-perl> on Debian and Ubuntu, F<perl-XML-LibXML> on the
+distributions of Red Hat.  F<metamerge.yml> declares it.
+
+The file is read inside an element of its own, because the package writes more
+than one C<< <ossec_config> >> in it, and a document has one root.  The parser
+fetches nothing from the network and expands no entity.  The package also
+writes two hyphens inside a comment, which XML forbids and OSSEC reads, and
+C<document> below says what is done about that.
 
 =head1 METHODS
 
@@ -117,11 +127,6 @@ my %SINGLE = (
     client    => {},
 );
 
-# An element, an attribute in quotes, and a tag: what this reads of XML.
-my $NAME = qr/[[:alpha:]_][\w.-]*/;
-my $ATTR = qr/\s+$NAME\s*=\s*(?:"[^"<]*"|'[^'<]*')/;
-my $TAG  = qr{<(/?)($NAME)((?:$ATTR)*)\s*(/?)>};
-
 =head2 accumulates($key)
 
 True for a section that can appear many times, and for a child that is a list,
@@ -149,7 +154,7 @@ sub separator {
 
 =head2 @items = $language->items($key, $value)
 
-The elements in C<$value>, each as one line.
+The elements in C<$value>, each as one line of XML.
 
 =cut
 
@@ -172,12 +177,12 @@ sub parse {
     my @directives;
     foreach my $root ( elements($text) ) {
         die "<$root->{name}> is not <ossec_config>, which is the root of ossec.conf.\n" unless $root->{name} eq 'ossec_config';
-        foreach my $section ( elements( $root->{inner} ) ) {
+        foreach my $section ( children( $root->{node} ) ) {
             if ( !$SINGLE{ $section->{name} } ) {
                 push @directives, { key => $section->{name}, value => $section->{empty} ? q{} : $section->{text} };
                 next;
             }
-            foreach my $child ( elements( $section->{inner} ) ) {
+            foreach my $child ( children( $section->{node} ) ) {
                 push @directives, { key => "$section->{name}/$child->{name}", value => $child->{empty} ? q{} : $child->{text} };
             }
         }
@@ -188,32 +193,37 @@ sub parse {
 =head2 emit($directives)
 
 One C<< <ossec_config> >> holding every section, in the order that each was
-first seen, with the children of a section that appears once together in it.
+first seen, with the children of a section that appears once together in it,
+written by L<XML::LibXML> with one element to a line.
 
 =cut
 
 sub emit {
     my ( $self, $directives ) = @_;
 
-    my ( @order, %lines );
+    my ( @order, %items );
     foreach my $directive (@$directives) {
         my ($section) = sections( $directive->{key} );
-        push @order, $section unless $lines{$section};
-        my @items = $self->accumulates( $directive->{key} ) ? $self->items( $directive->{key}, $directive->{value} ) : grep { length } $directive->{value};
-        push @{ $lines{$section} }, @items;
+        push @order,                $section unless $items{$section};
+        push @{ $items{$section} }, $self->accumulates( $directive->{key} ) ? $self->items( $directive->{key}, $directive->{value} ) : grep { length } $directive->{value};
     }
 
-    my $xml = "<ossec_config>\n";
+    my $doc  = XML::LibXML::Document->new( '1.0', 'UTF-8' );
+    my $root = $doc->createElement('ossec_config');
+    $doc->setDocumentElement($root);
     foreach my $section (@order) {
-        my @lines = @{ $lines{$section} };
-        next unless @lines;
-        if ( !$SINGLE{$section} ) {
-            $xml .= join( q{}, map { "  $_\n" } @lines );
-            next;
+        my @items = @{ $items{$section} };
+        next unless @items;
+        my $parent = $root;
+        if ( $SINGLE{$section} ) {
+            $parent = $doc->createElement($section);
+            $root->appendChild($parent);
         }
-        $xml .= "  <$section>\n" . join( q{}, map { "    $_\n" } @lines ) . "  </$section>\n";
+        foreach my $item (@items) {
+            $parent->appendChild( $doc->importNode($_) ) for map { $_->{node} } elements($item);
+        }
     }
-    return $xml . "</ossec_config>\n";
+    return $root->toString(1) . "\n";
 }
 
 =head2 header($file)
@@ -250,68 +260,141 @@ sub sections {
 =head2 @elements = elements($xml)
 
 The elements at the top level of C<$xml>, in order, each a hashref of C<name>,
-C<inner>, the text between its tags, C<text>, the whole element on one line
-with the space between tags taken out, and C<empty>, true for an element with
-no content and no attributes.  Comments and processing instructions are left
-out.  Dies on text outside an element, and on a tag that does not close.
+C<node>, the element with its comments and the space between its tags taken
+out, C<text>, that element as one line of XML, and C<empty>, true for an
+element with no content and no attributes.  Dies on XML that does not parse,
+and on text outside an element.
 
 =cut
+
+# No network, no entities and no DTD: a fragment is configuration, not a
+# document that may fetch others.
+my $PARSER = XML::LibXML->new( no_network => 1, expand_entities => 0, load_ext_dtd => 0 );
+
+# The code of libxml2 for two hyphens inside a comment, and how many of them one
+# file may have.
+my $HYPHENS_IN_COMMENT = 80;
+my $MOST_HYPHENS       = 1000;
 
 sub elements {
     my ($xml) = @_;
-
-    $xml =~ s/<!--.*?-->//gs;
-    $xml =~ s/<\?.*?\?>//gs;
-
-    my ( @elements, @stack );
-    my ( $start, $name, $attrs );
-    pos($xml) = 0;
-    while ( pos($xml) < length $xml ) {
-        if ( $xml =~ m/\G([^<]+)/gc ) {
-            my $text = $1;
-            die "Text outside of an element: '" . substr( $text, 0, 40 ) . "'\n" if !@stack && $text =~ m/\S/;
-            next;
-        }
-        my $at = pos($xml);
-        $xml =~ m/\G$TAG/gc or die "Cannot read the XML at '" . substr( $xml, $at, 40 ) . "'\n";
-        my ( $close, $tag, $tag_attrs, $self_closing ) = ( $1, $2, $3, $4 );
-
-        if ($close) {
-            my $open = pop @stack;
-            die "</$tag> closes <" . ( $open // 'nothing' ) . ">\n" unless defined $open && $open eq $tag;
-            next if @stack;
-            my $inner = substr( $xml, $start->[1], $at - $start->[1] );
-            push @elements, element( $name, $attrs, $inner );
-            next;
-        }
-
-        if ( !@stack ) {
-            ( $name, $attrs ) = ( $tag, $tag_attrs );
-            $start = [ $at, pos($xml) ];
-        }
-        if ($self_closing) {
-            push @elements, element( $tag, $tag_attrs, q{} ) unless @stack;
-            next;
-        }
-        push @stack, $tag;
-    }
-    die "<$stack[0]> does not close\n" if @stack;
-    return @elements;
+    return () unless defined $xml && $xml =~ m/\S/;
+    return children( document($xml)->documentElement );
 }
 
-=head2 $element = element($name, $attrs, $inner)
+=head2 $doc = document($xml)
 
-One element, as C<elements> returns it.
+C<$xml> parsed inside an element of its own, because the package writes more
+than one C<< <ossec_config> >> in the file, and a document has one root.  A
+declaration at the start, C<< <?xml ...?> >>, is left out, because XML allows
+it only at the start of a document.
+
+XML forbids two hyphens inside a comment, and the package writes them, as in
+C<< <!-- Frequency that syscheck is executed -- default every 20 hours --> >>.
+OSSEC reads a comment up to the next C<< --> >>.  So where libxml2 reports
+those two hyphens and nothing else, this puts a space between them at the line
+and column that libxml2 gives, and parses again.  The comment is dropped from
+the merge either way, and C<00-original> keeps the file as it was.  Dies on any
+other error.
 
 =cut
 
-sub element {
-    my ( $name, $attrs, $inner ) = @_;
+sub document {
+    my ($xml) = @_;
 
-    $attrs =~ s/\s+/ /g;
-    my $content = $inner =~ s/>\s+</></gr =~ s/\A\s+|\s+\z//gr;
-    my $text    = length $content ? "<$name$attrs>$content</$name>" : "<$name$attrs/>";
-    return { name => $name, inner => $inner, text => $text, empty => !length($content) && !length($attrs) };
+    # One line before the text, so that a line of libxml2 is one past a line of
+    # the text, and a column is a column.
+    my @lines = split( "\n", $xml =~ s/\A\s*<\?xml[^>]*\?>//r, -1 );
+    foreach ( 0 .. $MOST_HYPHENS ) {
+        my $doc = eval { $PARSER->load_xml( string => join( "\n", '<configd>', @lines, '</configd>' ) ) };
+        return $doc if $doc;
+
+        my @errors;
+        for ( my $error = $@; ref $error; $error = $error->_prev ) { unshift @errors, $error }
+        die 'Cannot read the XML: ' . ( ref $@ ? $@->message : $@ ) =~ s/\s+\z//r . "\n" if !@errors || grep { $_->code != $HYPHENS_IN_COMMENT } @errors;
+
+        my ($first) = @errors;
+        my $hyphens = hyphens( \@lines, $first->line - 2, $first->column );
+        die 'Cannot read the XML: ' . $first->message =~ s/\s+\z//r . "\n" unless defined $hyphens;
+        substr( $lines[ $first->line - 2 ], $hyphens, 2, '- -' );
+    }
+    die "Cannot read the XML: more than $MOST_HYPHENS comments with two hyphens in them\n";
+}
+
+=head2 $offset = hyphens(\@lines, $line, $column)
+
+Where in line C<$line> of C<@lines>, counted from 0, the two hyphens are that
+libxml2 reports at C<$column>, counted from 1: the first two at or after that
+column that neither start C<< <!-- >> nor end with C<< --> >>.  Undef when there
+are none, so that the error goes to the caller as it was.
+
+=cut
+
+sub hyphens {
+    my ( $lines, $line, $column ) = @_;
+    return if $line < 0 || $line > $#$lines;
+
+    my $text = $lines->[$line];
+    my $at   = index( $text, '--', ( $column // 1 ) > 2 ? $column - 2 : 0 );
+    while ( $at >= 0 ) {
+        my $opens  = $at >= 2 && substr( $text, $at - 2, 2 ) eq '<!';
+        my $closes = substr( $text, $at + 2, 1 ) eq '>';
+        return $at unless $opens || $closes;
+        $at = index( $text, '--', $at + 1 );
+    }
+    return;
+}
+
+=head2 @elements = children($node)
+
+The child elements of C<$node>, as C<elements> gives them.  Dies on text
+beside them that is not space.
+
+=cut
+
+sub children {
+    my ($node) = @_;
+
+    my @elements;
+    foreach my $child ( $node->childNodes ) {
+        my $type = $child->nodeType;
+        if ( $type == XML::LibXML::XML_TEXT_NODE() || $type == XML::LibXML::XML_CDATA_SECTION_NODE() ) {
+            die "Text outside of an element: '" . substr( $child->data =~ s/\A\s+//r, 0, 40 ) . "'\n" if $child->data =~ m/\S/;
+            next;
+        }
+        next unless $type == XML::LibXML::XML_ELEMENT_NODE();
+
+        my $element = tidy( $child->cloneNode(1) );
+        push @elements, {
+            name  => $element->nodeName,
+            node  => $element,
+            text  => $element->toString(0),
+            empty => !$element->hasChildNodes && !$element->hasAttributes,
+        };
+    }
+    return @elements;
+}
+
+=head2 $node = tidy($node)
+
+C<$node> with its comments, processing instructions and text that is only
+space taken out, at every depth.  The space between tags is for people, and two
+blocks that differ in it are the same block.
+
+=cut
+
+sub tidy {
+    my ($node) = @_;
+
+    foreach my $child ( $node->childNodes ) {
+        my $type = $child->nodeType;
+        if ( $type == XML::LibXML::XML_COMMENT_NODE() || $type == XML::LibXML::XML_PI_NODE() || ( $type == XML::LibXML::XML_TEXT_NODE() && $child->data !~ m/\S/ ) ) {
+            $node->removeChild($child);
+            next;
+        }
+        tidy($child) if $type == XML::LibXML::XML_ELEMENT_NODE();
+    }
+    return $node;
 }
 
 =head1 SEE ALSO

@@ -15,6 +15,8 @@ service and handing it all back
 use Test::More;
 use Test::Fatal qw{exception};
 use Capture::Tiny();
+use File::Temp();
+use File::Path();
 
 use FindBin::libs;
 
@@ -331,6 +333,18 @@ subtest 'a new version beside a file that is not adopted is left alone' => sub {
     my ($file) = grep { $_->{path} eq '/etc/postfix/main.cf' } $language->files();
     is_deeply( [ $language->take_package_update($file) ], [], 'nothing is taken' );
     ok( -e "$root/etc/postfix/main.cf.dpkg-dist", 'and the file stays for whoever adopts it, or for dpkg' );
+};
+
+subtest 'a language that is installed and does not load says why' => sub {
+    my $lib = File::Temp::tempdir( CLEANUP => 1 );
+    File::Path::make_path("$lib/Configd/Language");
+    Configd::Language::spew( "$lib/Configd/Language/brokenlang.pm", "package Configd::Language::brokenlang;\nuse Bogus::Missing::Module;\n1;\n" );
+    local @INC = ( $lib, @INC );
+
+    my $error = exception { Configd->language('brokenlang') };
+    $error //= q{};
+    like( $error, qr/The[ ]language[ ]'brokenlang'[ ]does[ ]not[ ]load/, 'it says that the language is there and does not load' );
+    like( $error, qr{Bogus/Missing/Module[.]pm},                         'and gives the reason of perl' );
 };
 
 subtest 'a language nobody has says so, and says what there is' => sub {

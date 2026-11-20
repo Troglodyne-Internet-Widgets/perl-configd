@@ -19,6 +19,11 @@ use File::Path  qw{make_path};
 
 use FindBin::libs;
 
+# Recommended, not required: see metamerge.yml.
+BEGIN {
+    eval { require XML::LibXML; 1 } or plan( skip_all => 'Configd::Language::ossec needs XML::LibXML, which is not installed' );
+}
+
 use Configd();
 use Configd::Language();
 use Configd::Language::ossec();    ## no critic (ProhibitUnusedImports) -- the class whose methods the test calls by name
@@ -108,7 +113,7 @@ subtest 'the package and a fragment' => sub {
     like( $xml, qr{<disabled>yes</disabled>.*</syscheck>}s,                   'in its section, beside what the fragment adds' );
     is_deeply( [ $xml =~ m{<white_list>([^<]+)</white_list>}g ], ['127.0.0.1'], 'an empty element clears its list, and what comes after it adds to nothing' );
     is_deeply( [ $xml =~ m{<location>([^<]+)</location>}g ],     [],            'and an empty section clears every block of it' );
-    like( $xml, qr{<remote><connection>syslog</connection><port>10514</port></remote>}, 'a block of the fragment is added' );
+    like( $xml, qr{<remote>\s*<connection>syslog</connection>\s*<port>10514</port>\s*</remote>}, 'a block of the fragment is added' );
 
     my @sections = $xml =~ m{^  <(\w+)}mg;
     is_deeply( \@sections, [qw{global rules syscheck remote}], 'one of each section that appears once, in the order first seen' );
@@ -132,10 +137,34 @@ subtest 'the generated file starts with a comment that XML allows' => sub {
 
 subtest 'what it refuses' => sub {
     my $language = 'Configd::Language::ossec'->new();
-    like( exception { $language->parse("<agent_config>\n</agent_config>\n") },                 qr/is[ ]not[ ]<ossec_config>/, 'a root other than ossec_config' );
-    like( exception { $language->parse("<ossec_config>\n  <global>\n</ossec_config>\n") },     qr/closes[ ]<global>/,         'a tag that is not closed' );
-    like( exception { $language->parse("<ossec_config><x><![CDATA[a]]></x></ossec_config>") }, qr/Cannot[ ]read[ ]the[ ]XML/, 'and what it does not read, such as CDATA' );
-    like( exception { $language->parse("stray\n<ossec_config/>\n") },                          qr/Text[ ]outside/,            'and text outside of an element' );
+    like( exception { $language->parse("<agent_config>\n</agent_config>\n") },             qr/is[ ]not[ ]<ossec_config>/, 'a root other than ossec_config' );
+    like( exception { $language->parse("<ossec_config>\n  <global>\n</ossec_config>\n") }, qr/Cannot[ ]read[ ]the[ ]XML/, 'a tag that is not closed' );
+    like( exception { $language->parse("stray\n<ossec_config/>\n") },                      qr/Text[ ]outside/,            'and text outside of an element' );
+};
+
+subtest 'two hyphens in a comment, which the package writes and XML forbids' => sub {
+    my $xml = merged(<<'XML');
+<ossec_config>
+  <syscheck>
+    <!-- Frequency that syscheck is executed -- default every 20 hours -->
+    <frequency>79200</frequency>
+    <!-- one -- and two -- on a line --><directories>/etc</directories>
+  </syscheck>
+  <localfile><location>/var/log/a--b.log</location></localfile>
+</ossec_config>
+XML
+    like( $xml,                                                                         qr{<frequency>79200</frequency>},             'the file is read' );
+    like( $xml,                                                                         qr{<directories>/etc</directories>},          'past two of them on one line' );
+    like( $xml,                                                                         qr{<location>/var/log/a--b[.]log</location>}, 'and two hyphens outside of a comment are left as they are' );
+    like( exception { merged("<ossec_config><!-- a -- b --><global></ossec_config>") }, qr/Cannot[ ]read[ ]the[ ]XML/,                'and any other error still stops it' );
+};
+
+subtest 'what a real parser reads that a guess would not' => sub {
+    my $xml = merged("<ossec_config><global><email_to>a&amp;b\@example.com</email_to></global><localfile><location><![CDATA[/var/log/<x>.log]]></location></localfile></ossec_config>");
+    like( $xml, qr{<email_to>a&amp;b\@example[.]com</email_to>},           'an entity is written back as it was' );
+    like( $xml, qr{\Q<location><![CDATA[/var/log/<x>.log]]></location>\E}, 'and CDATA is read, and written back as it was' );
+    my $commented = merged("<ossec_config><localfile><location attr=\"&lt;!--\">/x</location></localfile></ossec_config>");
+    like( $commented, qr{<location attr="&lt;!--">/x</location>}, 'and a comment marker inside an attribute is not a comment' );
 };
 
 subtest 'adopting the file of the package' => sub {
