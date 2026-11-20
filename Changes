@@ -1,5 +1,13 @@
 Revision history for Configd
 
+0.006 2026-11-20 TEODESIAN
+    - A package upgrade of an adopted file reaches the service.  The file
+      that configd generates is not the one that the package installed, so
+      dpkg writes the new version beside it as .dpkg-dist, and rpm as
+      .rpmnew, and 00-original stayed at the version from the day of the
+      adoption.  The next build now takes that file as 00-original, and
+      keeps the old one as 00-original.dpkg-old or .rpmsave.
+
 0.005 2026-10-24 TEODESIAN
     - postfix: smtp_sasl_password_maps and smtp_tls_policy_maps accumulate.
       A host that sends each mail domain through a relay of its own names a

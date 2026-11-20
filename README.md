@@ -4,7 +4,7 @@ Configd - Give software without a conf.d one anyway.
 
 # VERSION
 
-version 0.005
+version 0.006
 
 # SYNOPSIS
 
@@ -85,6 +85,14 @@ no such setting any more -- reproducing the distribution's paragraph above a
 value that has since been replaced tells the reader something untrue.  They stay
 in the fragment they were written in, and `00-original` keeps every one the file
 arrived with.
+
+**A package upgrade replaces `00-original`.**  The generated file is not the
+one that the package installed, so dpkg leaves the new version beside it as
+`.dpkg-dist`, and rpm as `.rpmnew`.  The next build makes that the new
+`00-original` and keeps the old one as `00-original.dpkg-old` or
+`00-original.rpmsave`, out of the merge.  So the defaults of a new release
+reach the service at its next restart, and an edit made to the file before it
+was adopted stops taking part.  Put such an edit in a fragment.
 
 **Editing the generated file works until the next restart.**  That is deliberate:
 long enough to test something, short enough that nobody comes to rely on it.  The
