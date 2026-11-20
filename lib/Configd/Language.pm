@@ -88,12 +88,13 @@ point it at contains something it would reject.
 
 =back
 
-What the four here answered:
+What the ones here answered:
 
     postfix     nothing at all                                     -> ours
     opendmarc   Include is not a directive it knows                -> ours
     redis       include of one file; a glob is a fatal error       -> ours
     opendkim    Include of one file; glob refused, directory ignored -> ours
+    ossec       one file for every daemon; include for rules only  -> ours
     chrony      confdir, shipped and supported since 4.0           -> NOT ours
 
 chrony had a language here and lost it.  The fleet's own template was
