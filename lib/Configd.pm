@@ -118,6 +118,12 @@ C<ExecStartPre>, so it stands between a service and starting, and it has to work
 on whatever perl the guest already has rather than one somebody installed first.
 Ubuntu 24.04 ships 5.38 and 22.04 ships 5.34.
 
+One language is the exception.  L<Configd::Language::ossec> reads XML, which
+core perl has no parser for, so it needs L<XML::LibXML>.  Only a host that
+installs OSSEC has its file to adopt, and the same install can bring the parser
+from the packages of the distribution.  F<metamerge.yml> declares it, and the
+other languages load without it.
+
 L<Configd::Language> is where the design is written down and what you subclass
 to teach it a new format.  Read the part about checking for a native C<conf.d>
 first: this is for software that has none, and using it where a real mechanism
@@ -157,7 +163,8 @@ is how C<root> gets there.
 
 Dies naming what is available when there is no such language, because the
 alternative is a typo looking exactly like a language that does not handle the
-file you expected.
+file you expected.  Dies with the error of perl when the language is installed
+and does not load, such as the ossec language without L<XML::LibXML>.
 
 =cut
 
@@ -171,7 +178,13 @@ sub language {
 
     my $module = "Configd::Language::$name";
     eval { Module::Load::load($module); 1 } or do {
+        my $error = $@;
         my @known = $class->languages();
+
+        # A language that is here and does not load is not a typo.  The ossec
+        # language needs XML::LibXML, and "no language" would send whoever
+        # reads it looking for the wrong thing.
+        die "The language '$name' does not load: $error" if grep { $_ eq $name } @known;
         die "No language '$name'. This installation knows: " . join( ', ', @known ) . "\n";
     };
 

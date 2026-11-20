@@ -4,7 +4,7 @@ Configd - Give software without a conf.d one anyway.
 
 # VERSION
 
-version 0.006
+version 0.007
 
 # SYNOPSIS
 
@@ -109,6 +109,12 @@ Ubuntu 24.04 ships 5.38 and 22.04 ships 5.34.
 to teach it a new format.  Read the part about checking for a native `conf.d`
 first: this is for software that has none, and using it where a real mechanism
 exists trades a working feature for a moving part.
+
+One language is the exception.  [Configd::Language::ossec](https://metacpan.org/pod/Configd%3A%3ALanguage%3A%3Aossec) reads XML, which
+core perl has no parser for, so it needs [XML::LibXML](https://metacpan.org/pod/XML%3A%3ALibXML).  Only a host that
+installs OSSEC has its file to adopt, and the same install can bring the parser
+from the packages of the distribution.  `metamerge.yml` declares it, and the
+other languages load without it.
 
 # NAME
 
