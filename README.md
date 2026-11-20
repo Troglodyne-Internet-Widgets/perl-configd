@@ -105,16 +105,16 @@ Core perl 5.34 or newer, and nothing else.  Deliberately: this runs from
 on whatever perl the guest already has rather than one somebody installed first.
 Ubuntu 24.04 ships 5.38 and 22.04 ships 5.34.
 
-[Configd::Language](https://metacpan.org/pod/Configd%3A%3ALanguage) is where the design is written down and what you subclass
-to teach it a new format.  Read the part about checking for a native `conf.d`
-first: this is for software that has none, and using it where a real mechanism
-exists trades a working feature for a moving part.
-
 One language is the exception.  [Configd::Language::ossec](https://metacpan.org/pod/Configd%3A%3ALanguage%3A%3Aossec) reads XML, which
 core perl has no parser for, so it needs [XML::LibXML](https://metacpan.org/pod/XML%3A%3ALibXML).  Only a host that
 installs OSSEC has its file to adopt, and the same install can bring the parser
 from the packages of the distribution.  `metamerge.yml` declares it, and the
 other languages load without it.
+
+[Configd::Language](https://metacpan.org/pod/Configd%3A%3ALanguage) is where the design is written down and what you subclass
+to teach it a new format.  Read the part about checking for a native `conf.d`
+first: this is for software that has none, and using it where a real mechanism
+exists trades a working feature for a moving part.
 
 # NAME
 
@@ -137,7 +137,8 @@ is how `root` gets there.
 
 Dies naming what is available when there is no such language, because the
 alternative is a typo looking exactly like a language that does not handle the
-file you expected.
+file you expected.  Dies with the error of perl when the language is installed
+and does not load, such as the ossec language without [XML::LibXML](https://metacpan.org/pod/XML%3A%3ALibXML).
 
 ## build($name, %opts)
 
@@ -198,9 +199,10 @@ Current Maintainers:
 
 - George S. Baugh <george@troglodyne.net>
 
-# CONTRIBUTOR
+# CONTRIBUTORS
 
-troglodyne-bot <morpheus@troglodyne.net>
+- troglodyne-bot <morpheus@troglodyne.net>
+- troglodyne-robot <trogbot@troglodyne.net>
 
 # COPYRIGHT AND LICENSE
 
