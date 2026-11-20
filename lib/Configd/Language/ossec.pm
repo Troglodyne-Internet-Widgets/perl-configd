@@ -25,6 +25,12 @@ of OSSEC reads, with no directory beside it.
     Configd->adopt('ossec');
     Configd->build('ossec');
 
+=head1 DESCRIPTION
+
+Every daemon of OSSEC reads F</var/ossec/etc/ossec.conf>, and nothing else.  Its
+one include is for rule files, inside C<< <rules> >>.  So the file becomes
+generated, and a fragment is a file of its own.
+
 A fragment is XML in the form of F<ossec.conf> itself:
 
     <ossec_config>
@@ -37,12 +43,6 @@ A fragment is XML in the form of F<ossec.conf> itself:
         <port>10514</port>
       </remote>
     </ossec_config>
-
-=head1 DESCRIPTION
-
-Every daemon of OSSEC reads F</var/ossec/etc/ossec.conf>, and nothing else.  Its
-one include is for rule files, inside C<< <rules> >>.  So the file becomes
-generated, and a fragment is a file of its own.
 
 =head2 How the file is merged
 
