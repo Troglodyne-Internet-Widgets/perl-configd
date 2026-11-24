@@ -162,7 +162,7 @@ sub slurp {
     open( my $fh, '<:encoding(UTF-8)', $path ) or die "Could not read $path: $!\n";
     local $/ = undef;
     my $text = <$fh>;
-    close $fh;
+    close $fh or die "Could not finish reading $path: $!\n";
     return $text // q{};
 }
 
@@ -198,12 +198,13 @@ sub spew {
     return $path if $> != 0;
 
     if (@was) {
-        chown( $was[4], $was[5], $path ) if $was[4] != $> || $was[5] != $);
+        my ( $was_uid, $was_gid ) = @was[ 4, 5 ];
+        chown( $was_uid, $was_gid, $path ) if $was_uid != $> || $was_gid != $);
     }
     elsif ( defined $owner ) {
-        my ( $user, $group ) = split( q{:}, $owner );
-        my $uid = defined $user  && length $user  ? getpwnam($user)  : undef;
-        my $gid = defined $group && length $group ? getgrnam($group) : undef;
+        my ( $user, $group ) = split m/:/sx, $owner;
+        my $uid = length( $user  // q{} ) > 0 ? getpwnam($user)  : undef;
+        my $gid = length( $group // q{} ) > 0 ? getgrnam($group) : undef;
 
         # An account that is not there is not an error: the file is being built
         # somewhere the service is not installed, which is what --root is for.
@@ -390,19 +391,19 @@ sub items {
     my ( $self, $key, $value ) = @_;
     return () unless defined $value;
 
-    my $punctuation = $self->separator($key) =~ s/\s+//gr;
+    my $punctuation = $self->separator($key) =~ s/\s+//gsxr;
     my @items       = (q{});
     my $depth       = 0;
-    foreach my $char ( split m//, $value ) {
-        if ( !$depth && ( $char =~ m/\s/ || index( $punctuation, $char ) >= 0 ) ) {
-            push @items, q{} if length $items[-1];
+    foreach my $char ( split m//sx, $value ) {
+        if ( !$depth && ( $char =~ m/\s/sx || index( $punctuation, $char ) >= 0 ) ) {
+            push @items, q{} if length( $items[-1] ) > 0;
             next;
         }
         $depth++ if $char eq '{';
         $depth-- if $char eq '}' && $depth;
         $items[-1] .= $char;
     }
-    return grep { length } @items;
+    return grep { length($_) > 0 } @items;
 }
 
 =head2 @items = $language->combine($key, @items)
@@ -432,7 +433,7 @@ running system's C</etc>.
 sub new {
     my ( $class, %opts ) = @_;
     $opts{root} //= q{};
-    $opts{root} =~ s{/\z}{};
+    $opts{root} =~ s{/\z}{}sx;
     return bless {%opts}, $class;
 }
 
@@ -446,7 +447,7 @@ package name.
 sub name {
     my ($self) = @_;
     my $class = ref $self || $self;
-    return ( split( q{::}, $class ) )[-1];
+    return ( split m/::/sx, $class )[-1];
 }
 
 =head2 $language->root()
@@ -503,7 +504,10 @@ sub fragments {
 
     my $dir = $self->fragment_dir($file);
     opendir( my $dh, $dir ) or return ();
-    my @names = sort grep { !m/\A[.]/ && !m/(?:[.](?:disabled|bak|dpkg-old|dpkg-new|dpkg-dist|rpmsave|rpmnew)|~)\z/ } readdir($dh);
+    my $hidden = qr/\A[.]/sx;
+    my $dotted = join q{|}, qw{disabled bak dpkg-old dpkg-new dpkg-dist rpmsave rpmnew};
+    my $suffix = qr/(?:[.](?:$dotted)|~)\z/sx;
+    my @names  = sort grep { !m/$hidden/sx && !m/$suffix/sx } readdir($dh);
     closedir $dh;
 
     return map { "$dir/$_" } grep { -f "$dir/$_" } @names;    ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
@@ -585,13 +589,17 @@ sub merge {
                 # it.  systemd drop-ins spell the same thing the same way, and
                 # for these parameters an empty value is what postfix reads it
                 # as anyway.
-                if ( !length( $directive->{value} // q{} ) ) {
+                if ( length( $directive->{value} // q{} ) == 0 ) {
                     $by_key{$key} = {%$directive};
                     next;
                 }
 
                 my %seen;
-                my @items = grep { !$seen{$_}++ } map { $self->items( $key, $_ ) } $by_key{$key}{value}, $directive->{value};
+                my @items;
+                foreach my $value ( $by_key{$key}{value}, $directive->{value} ) {
+                    push @items, $self->items( $key, $value );
+                }
+                @items = grep { !$seen{$_}++ } @items;
                 $by_key{$key}{value} = join( $self->separator($key), $self->combine( $key, @items ) );
                 next;
             }
@@ -649,7 +657,7 @@ sub header {
 HEADER
 }
 
-=head2 $language->write($file)
+=head2 $language->write_file($file)
 
 Generate one file and put it in place, returning true if what is on disk
 changed.
@@ -660,7 +668,7 @@ new one and never half of either.
 
 =cut
 
-sub write {
+sub write_file {
     my ( $self, $file ) = @_;
 
     $self->take_package_update($file);
@@ -674,7 +682,7 @@ sub write {
     # spew keeps whatever the file already was: postfix's master.cf is 0600 on a
     # mail server set up properly, and handing that back to 0644 while "just
     # regenerating a file" is not something anybody would go looking for.
-    spew( $target, $wanted, $file->{mode}, $file->{owner} );
+    spew( $target, $wanted, @{$file}{qw{mode owner}} );
 
     return 1;
 }
@@ -717,8 +725,9 @@ sub take_package_update {
         next unless -f $new;          ## no critic (ValuesAndExpressions::ProhibitFiletest_f) -- whether the package manager left one, which slurp then reads or dies on
 
         my @was = stat $original;
-        spew( "$original$old_suffix", slurp($original), $was[2] & 0o7777 );
-        chown( $was[4], $was[5], "$original$old_suffix" ) if $> == 0;
+        my ( $was_mode, $was_uid, $was_gid ) = @was[ 2, 4, 5 ];
+        spew( "$original$old_suffix", slurp($original), $was_mode & 0o7777 );
+        chown( $was_uid, $was_gid, "$original$old_suffix" ) if $> == 0;
 
         # spew keeps the mode and owner of a file that is already there.
         spew( $original, slurp($new) );
@@ -762,7 +771,7 @@ sub adopt {
         # Already ours.  Re-adopting would take the file we generated last time
         # and make it the first fragment, which duplicates every setting in it.
         if ( -f $original ) {    ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
-            $self->write($file);
+            $self->write_file($file);
             next;
         }
 
@@ -772,14 +781,15 @@ sub adopt {
         # whose /etc/<package> can be traversed.
         my @was = stat $target;
         if (@was) {
-            spew( $original, slurp($target), $was[2] & 0o7777 );
-            chown( $was[4], $was[5], $original ) if $> == 0;
+            my ( $was_mode, $was_uid, $was_gid ) = @was[ 2, 4, 5 ];
+            spew( $original, slurp($target), $was_mode & 0o7777 );
+            chown( $was_uid, $was_gid, $original ) if $> == 0;
         }
         else {
             spew( $original, q{}, $file->{mode} );
         }
 
-        $self->write($file);
+        $self->write_file($file);
         push @adopted, $file->{path};
     }
 

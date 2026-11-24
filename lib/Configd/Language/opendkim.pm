@@ -1,4 +1,4 @@
-package Configd::Language::opendkim;
+package Configd::Language::opendkim;    ## no critic (NamingConventions::Capitalization) -- the name is the name of the service, which is how a language is picked on the command line
 
 #ABSTRACT: opendkim.conf, which has never had a conf.d.
 

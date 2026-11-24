@@ -59,8 +59,8 @@ sub parse {
     my ( $self, $text ) = @_;
 
     my @directives;
-    foreach my $line ( split( qq{\n}, $text ) ) {
-        if ( $line =~ m/\A\s*(?:#.*)?\z/ ) {
+    foreach my $line ( split m/\n/sx, $text ) {
+        if ( $line =~ m/\A\s*(?:\#.*)?\z/sx ) {
             push @directives, { text => $line };
             next;
         }
@@ -68,11 +68,11 @@ sub parse {
         # Tabs as often as spaces in these files, and a value that runs to the
         # end of the line: opendkim's Canonicalization is one word, its
         # InternalHosts is a list, and neither is quoted.
-        my ( $key, $value ) = $line =~ m/\A\s*(\S+)\s+(.*?)\s*\z/;
+        my ( $key, $value ) = $line =~ m/\A\s*(\S+)\s+(.*?)\s*\z/sx;
 
         # A directive on its own is legal in some of these -- redis has bare
         # flags -- and means itself.
-        ( $key, $value ) = ( $line =~ s/\A\s+|\s+\z//gr, q{} ) if !defined $key;
+        ( $key, $value ) = ( $line =~ s/\A\s+|\s+\z//gsxr, q{} ) if !defined $key;
 
         push @directives, { key => $key, value => $value };
     }
@@ -101,7 +101,7 @@ sub emit {
         }
 
         $out .=
-          length $directive->{value}
+          length( $directive->{value} ) > 0
           ? "$directive->{key} $directive->{value}\n"
           : "$directive->{key}\n";
     }

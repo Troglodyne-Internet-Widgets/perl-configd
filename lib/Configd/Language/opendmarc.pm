@@ -1,4 +1,4 @@
-package Configd::Language::opendmarc;
+package Configd::Language::opendmarc;    ## no critic (NamingConventions::Capitalization) -- the name is the name of the service, which is how a language is picked on the command line
 
 #ABSTRACT: opendmarc.conf, which has never had a conf.d.
 

@@ -1,4 +1,4 @@
-package Configd::Language::ossec;
+package Configd::Language::ossec;    ## no critic (NamingConventions::Capitalization) -- the name is the name of the service, which is how a language is picked on the command line
 
 #ABSTRACT: ossec.conf, which is one XML file that every daemon of OSSEC reads, with no directory beside it.
 
@@ -6,6 +6,7 @@ use 5.034;
 
 use strict;
 use warnings FATAL => 'all';
+no autovivification;
 
 use re '/aa';
 
@@ -204,8 +205,16 @@ sub emit {
     my ( @order, %items );
     foreach my $directive (@$directives) {
         my ($section) = sections( $directive->{key} );
-        push @order,                $section unless $items{$section};
-        push @{ $items{$section} }, $self->accumulates( $directive->{key} ) ? $self->items( $directive->{key}, $directive->{value} ) : grep { length } $directive->{value};
+        push @order, $section unless $items{$section};
+        my ( $key, $value ) = @{$directive}{qw{key value}};
+        my @new;
+        if ( $self->accumulates($key) ) {
+            @new = $self->items( $key, $value );
+        }
+        elsif ( length( $value // q{} ) > 0 ) {
+            @new = ($value);
+        }
+        push @{ $items{$section} }, @new;
     }
 
     my $doc  = XML::LibXML::Document->new( '1.0', 'UTF-8' );
@@ -220,7 +229,9 @@ sub emit {
             $root->appendChild($parent);
         }
         foreach my $item (@items) {
-            $parent->appendChild( $doc->importNode($_) ) for map { $_->{node} } elements($item);
+            foreach my $element ( elements($item) ) {
+                $parent->appendChild( $doc->importNode( $element->{node} ) );
+            }
         }
     }
     return $root->toString(1) . "\n";
@@ -236,7 +247,7 @@ sub header {
     my ( $self, $file ) = @_;
 
     # An XML comment cannot hold two hyphens in a row.
-    my $text = $self->SUPER::header($file) =~ s/^#[ ]?//gmr =~ s/-{2,}/-/gr;
+    my $text = $self->SUPER::header($file) =~ s/^\#[ ]?//gmsxr =~ s/-{2,}/-/gsxr;
     return "<!--\n$text-->\n";
 }
 
@@ -278,7 +289,7 @@ my $MOST_HYPHENS       = 1000;
 
 sub elements {
     my ($xml) = @_;
-    return () unless defined $xml && $xml =~ m/\S/;
+    return () unless defined $xml && $xml =~ m/\S/sx;
     return children( document($xml)->documentElement );
 }
 
@@ -304,18 +315,22 @@ sub document {
 
     # One line before the text, so that a line of libxml2 is one past a line of
     # the text, and a column is a column.
-    my @lines = split( "\n", $xml =~ s/\A\s*<\?xml[^>]*\?>//r, -1 );
-    foreach ( 0 .. $MOST_HYPHENS ) {
+    my @lines    = split m/\n/sx, $xml =~ s/\A\s*<\?xml[^>]*\?>//sxr, -1;
+    my $attempts = 0;
+    while ( $attempts++ <= $MOST_HYPHENS ) {
         my $doc = eval { $PARSER->load_xml( string => join( "\n", '<configd>', @lines, '</configd>' ) ) };
         return $doc if $doc;
 
-        my @errors;
-        for ( my $error = $@; ref $error; $error = $error->_prev ) { unshift @errors, $error }
-        die 'Cannot read the XML: ' . ( ref $@ ? $@->message : $@ ) =~ s/\s+\z//r . "\n" if !@errors || grep { $_->code != $HYPHENS_IN_COMMENT } @errors;
+        my ( @errors, $other );
+        for ( my $error = $@; ref $error; $error = $error->_prev ) {
+            unshift @errors, $error;
+            $other = 1 if $error->code != $HYPHENS_IN_COMMENT;
+        }
+        die 'Cannot read the XML: ' . ( ref $@ ? $@->message : $@ ) =~ s/\s+\z//sxr . "\n" if !@errors || $other;
 
         my ($first) = @errors;
         my $hyphens = hyphens( \@lines, $first->line - 2, $first->column );
-        die 'Cannot read the XML: ' . $first->message =~ s/\s+\z//r . "\n" unless defined $hyphens;
+        die 'Cannot read the XML: ' . $first->message =~ s/\s+\z//sxr . "\n" unless defined $hyphens;
         substr( $lines[ $first->line - 2 ], $hyphens, 2, '- -' );
     }
     die "Cannot read the XML: more than $MOST_HYPHENS comments with two hyphens in them\n";
@@ -359,7 +374,7 @@ sub children {
     foreach my $child ( $node->childNodes ) {
         my $type = $child->nodeType;
         if ( $type == XML::LibXML::XML_TEXT_NODE() || $type == XML::LibXML::XML_CDATA_SECTION_NODE() ) {
-            die "Text outside of an element: '" . substr( $child->data =~ s/\A\s+//r, 0, 40 ) . "'\n" if $child->data =~ m/\S/;
+            die "Text outside of an element: '" . substr( $child->data =~ s/\A\s+//sxr, 0, 40 ) . "'\n" if $child->data =~ m/\S/sx;
             next;
         }
         next unless $type == XML::LibXML::XML_ELEMENT_NODE();
@@ -386,13 +401,18 @@ blocks that differ in it are the same block.
 sub tidy {
     my ($node) = @_;
 
-    foreach my $child ( $node->childNodes ) {
-        my $type = $child->nodeType;
-        if ( $type == XML::LibXML::XML_COMMENT_NODE() || $type == XML::LibXML::XML_PI_NODE() || ( $type == XML::LibXML::XML_TEXT_NODE() && $child->data !~ m/\S/ ) ) {
-            $node->removeChild($child);
-            next;
+    # A queue rather than a call of itself for each child, so that the depth
+    # of the XML is not the depth of the stack.
+    my @pending = ($node);
+    while ( my $current = shift @pending ) {
+        foreach my $child ( $current->childNodes ) {
+            my $type = $child->nodeType;
+            if ( $type == XML::LibXML::XML_COMMENT_NODE() || $type == XML::LibXML::XML_PI_NODE() || ( $type == XML::LibXML::XML_TEXT_NODE() && $child->data !~ m/\S/sx ) ) {
+                $current->removeChild($child);
+                next;
+            }
+            push @pending, $child if $type == XML::LibXML::XML_ELEMENT_NODE();
         }
-        tidy($child) if $type == XML::LibXML::XML_ELEMENT_NODE();
     }
     return $node;
 }
