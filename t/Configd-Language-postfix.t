@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+#!perl
 use 5.034;
 
 use strict;
@@ -74,9 +74,9 @@ subtest 'two domains on one mail server both stay local' => sub {
     );
 
     my $destination = value_of( $merged, 'mydestination' );
-    like( $destination, qr/\Qfirst.example.com\E/,  'the first domain is still there' );
-    like( $destination, qr/\Qsecond.example.com\E/, 'and so is the second' );
-    like( $destination, qr/\$myhostname/,           'and what was in main.cf to begin with' );
+    like( $destination, qr/first[.]example[.]com/sx,  'the first domain is still there' );
+    like( $destination, qr/second[.]example[.]com/sx, 'and so is the second' );
+    like( $destination, qr/[\$]myhostname/sx,         'and what was in main.cf to begin with' );
 
     is(
         value_of( $merged, 'virtual_mailbox_domains' ),
@@ -96,7 +96,7 @@ subtest 'a value that already ends in a separator does not get two' => sub {
     );
 
     my $destination = value_of( $merged, 'mydestination' );
-    unlike( $destination, qr/,\s*,/, 'no doubled separator' );
+    unlike( $destination, qr/,\s*,/sx, 'no doubled separator' );
     is(
         $destination,
         '$myhostname, localhost, www.example.com, second.example.com',
@@ -186,13 +186,13 @@ subtest 'a line that is neither is refused rather than dropped' => sub {
     # wrote, and they would have no way of telling.
     like(
         exception { $postfix->parse("this is not a setting\n") },
-        qr/Cannot parse postfix main\.cf line/,
+        qr/Cannot[ ]parse[ ]postfix[ ]main[.]cf[ ]line/sx,
         'main.cf'
     );
 
     like(
         exception { $postfix->parse("smtp inet n - y\n") },
-        qr/wanted 8 columns, got 5/,
+        qr/wanted[ ]8[ ]columns,[ ]got[ ]5/sx,
         'and a short master.cf row says how short'
     );
 };
@@ -259,10 +259,10 @@ subtest 'inet_interfaces is all when any fragment says all' => sub {
     # postfix refuses all beside an address, and all listens on every address
     # anyway.
     my %cases = (
-        'all and all'            => [ 'all',       'all',       'all' ],
-        'all and an address'     => [ 'all',       '127.0.0.1', 'all' ],
-        'an address and all'     => [ '127.0.0.1', 'all',       'all' ],
-        'two addresses and none' => [ '127.0.0.1', '[::1]',     '127.0.0.1, [::1]' ],
+        'all and all'            => [qw{all all all}],
+        'all and an address'     => [qw{all 127.0.0.1 all}],
+        'an address and all'     => [qw{127.0.0.1 all all}],
+        'two addresses and none' => [ '127.0.0.1', '[::1]', '127.0.0.1, [::1]' ],
     );
     foreach my $case ( sort keys %cases ) {
         my ( $first, $second, $want ) = @{ $cases{$case} };

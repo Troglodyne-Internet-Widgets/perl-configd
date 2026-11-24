@@ -1,4 +1,4 @@
-package Configd::Language::redis;
+package Configd::Language::redis;    ## no critic (NamingConventions::Capitalization) -- the name is the name of the service, which is how a language is picked on the command line
 
 #ABSTRACT: redis.conf, which has no conf.d and a handful of directives you say more than once.
 

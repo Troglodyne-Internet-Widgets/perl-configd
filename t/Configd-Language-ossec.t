@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+#!perl
 use 5.034;
 
 use strict;
@@ -95,27 +95,33 @@ XML
 sub merged {
     my (@fragments) = @_;
     my $language = 'Configd::Language::ossec'->new();
-    return $language->emit( $language->merge( map { $language->parse($_) } @fragments ) );
+    my @parsed;
+    foreach my $fragment (@fragments) {
+        push @parsed, $language->parse($fragment);
+    }
+    return $language->emit( $language->merge(@parsed) );
 }
 
 sub includes {
     my ($xml) = @_;
-    return [ $xml =~ m{<include>([^<]+)</include>}g ];
+    return [ $xml =~ m{<include>([^<]+)</include>}sxg ];
 }
 
 subtest 'the package and a fragment' => sub {
     my $xml = merged( $PACKAGE, $FRAGMENT );
 
     is_deeply( includes($xml), [qw{rules_config.xml pam_rules.xml syslog_rules.xml local_rules.xml trog_rules.xml}], 'the rule files of the package in its order, none that it comments out, and the new one after them' );
-    like( $xml, qr{<email_notification>no</email_notification>},              'a setting of the fragment wins' );
-    like( $xml, qr{<email_to>bogus\@example[.]com</email_to>},                'and one that it does not name stays' );
-    like( $xml, qr{<directories check_all="yes">/etc,/usr/bin</directories>}, 'with its attributes' );
-    like( $xml, qr{<disabled>yes</disabled>.*</syscheck>}s,                   'in its section, beside what the fragment adds' );
-    is_deeply( [ $xml =~ m{<white_list>([^<]+)</white_list>}g ], ['127.0.0.1'], 'an empty element clears its list, and what comes after it adds to nothing' );
-    is_deeply( [ $xml =~ m{<location>([^<]+)</location>}g ],     [],            'and an empty section clears every block of it' );
-    like( $xml, qr{<remote>\s*<connection>syslog</connection>\s*<port>10514</port>\s*</remote>}, 'a block of the fragment is added' );
+    like( $xml, qr{<email_notification>no</email_notification>}sx,                'a setting of the fragment wins' );
+    like( $xml, qr{<email_to>bogus[@]example[.]com</email_to>}sx,                 'and one that it does not name stays' );
+    like( $xml, qr{<directories[ ]check_all="yes">/etc,/usr/bin</directories>}sx, 'with its attributes' );
+    like( $xml, qr{<disabled>yes</disabled>.*</syscheck>}sx,                      'in its section, beside what the fragment adds' );
+    is_deeply( [ $xml =~ m{<white_list>([^<]+)</white_list>}sxg ], ['127.0.0.1'], 'an empty element clears its list, and what comes after it adds to nothing' );
+    is_deeply( [ $xml =~ m{<location>([^<]+)</location>}sxg ],     [],            'and an empty section clears every block of it' );
+    my $remote = qr{<remote>\s*<connection>syslog</connection>}sx;
+    my $port   = qr{\s*<port>10514</port>\s*</remote>}sx;
+    like( $xml, qr{$remote$port}sx, 'a block of the fragment is added' );
 
-    my @sections = $xml =~ m{^  <(\w+)}mg;
+    my @sections = $xml =~ m{^[ ][ ]<(\w+)}msxg;
     is_deeply( \@sections, [qw{global rules syscheck remote}], 'one of each section that appears once, in the order first seen' );
 };
 
@@ -128,18 +134,18 @@ subtest 'what it writes, it reads back' => sub {
 
 subtest 'the generated file starts with a comment that XML allows' => sub {
     my $header = 'Configd::Language::ossec'->new()->header( { path => '/var/ossec/etc/ossec.conf' } );
-    like( $header, qr{\A<!--\n.*-->\n\z}s, 'one comment' );
-    my ($inside) = $header =~ m{\A<!--(.*)-->}s;
-    unlike( $inside, qr/--/, 'with no two hyphens inside it' );
-    like( $inside, qr{ossec[.]conf[.]d}, 'naming the directory of the fragments' );
+    like( $header, qr{\A<!--\n.*-->\n\z}sx, 'one comment' );
+    my ($inside) = $header =~ m{\A<!--(.*)-->}sx;
+    unlike( $inside, qr/--/sx, 'with no two hyphens inside it' );
+    like( $inside, qr{ossec[.]conf[.]d}sx, 'naming the directory of the fragments' );
     is_deeply( 'Configd::Language::ossec'->new()->parse( $header . merged($PACKAGE) ), 'Configd::Language::ossec'->new()->parse( merged($PACKAGE) ), 'and the file reads the same with it' );
 };
 
 subtest 'what it refuses' => sub {
     my $language = 'Configd::Language::ossec'->new();
-    like( exception { $language->parse("<agent_config>\n</agent_config>\n") },             qr/is[ ]not[ ]<ossec_config>/, 'a root other than ossec_config' );
-    like( exception { $language->parse("<ossec_config>\n  <global>\n</ossec_config>\n") }, qr/Cannot[ ]read[ ]the[ ]XML/, 'a tag that is not closed' );
-    like( exception { $language->parse("stray\n<ossec_config/>\n") },                      qr/Text[ ]outside/,            'and text outside of an element' );
+    like( exception { $language->parse("<agent_config>\n</agent_config>\n") },             qr/is[ ]not[ ]<ossec_config>/sx, 'a root other than ossec_config' );
+    like( exception { $language->parse("<ossec_config>\n  <global>\n</ossec_config>\n") }, qr/Cannot[ ]read[ ]the[ ]XML/sx, 'a tag that is not closed' );
+    like( exception { $language->parse("stray\n<ossec_config/>\n") },                      qr/Text[ ]outside/sx,            'and text outside of an element' );
 };
 
 subtest 'two hyphens in a comment, which the package writes and XML forbids' => sub {
@@ -153,18 +159,18 @@ subtest 'two hyphens in a comment, which the package writes and XML forbids' => 
   <localfile><location>/var/log/a--b.log</location></localfile>
 </ossec_config>
 XML
-    like( $xml,                                                                         qr{<frequency>79200</frequency>},             'the file is read' );
-    like( $xml,                                                                         qr{<directories>/etc</directories>},          'past two of them on one line' );
-    like( $xml,                                                                         qr{<location>/var/log/a--b[.]log</location>}, 'and two hyphens outside of a comment are left as they are' );
-    like( exception { merged("<ossec_config><!-- a -- b --><global></ossec_config>") }, qr/Cannot[ ]read[ ]the[ ]XML/,                'and any other error still stops it' );
+    like( $xml,                                                                         qr{<frequency>79200</frequency>}sx,             'the file is read' );
+    like( $xml,                                                                         qr{<directories>/etc</directories>}sx,          'past two of them on one line' );
+    like( $xml,                                                                         qr{<location>/var/log/a--b[.]log</location>}sx, 'and two hyphens outside of a comment are left as they are' );
+    like( exception { merged("<ossec_config><!-- a -- b --><global></ossec_config>") }, qr/Cannot[ ]read[ ]the[ ]XML/sx,                'and any other error still stops it' );
 };
 
 subtest 'what a real parser reads that a guess would not' => sub {
     my $xml = merged("<ossec_config><global><email_to>a&amp;b\@example.com</email_to></global><localfile><location><![CDATA[/var/log/<x>.log]]></location></localfile></ossec_config>");
-    like( $xml, qr{<email_to>a&amp;b\@example[.]com</email_to>},           'an entity is written back as it was' );
-    like( $xml, qr{\Q<location><![CDATA[/var/log/<x>.log]]></location>\E}, 'and CDATA is read, and written back as it was' );
+    like( $xml, qr{<email_to>a&amp;b[@]example[.]com</email_to>}sx,            'an entity is written back as it was' );
+    like( $xml, qr{<location><!\[CDATA\[/var/log/<x>[.]log\]\]></location>}sx, 'and CDATA is read, and written back as it was' );
     my $commented = merged("<ossec_config><localfile><location attr=\"&lt;!--\">/x</location></localfile></ossec_config>");
-    like( $commented, qr{<location attr="&lt;!--">/x</location>}, 'and a comment marker inside an attribute is not a comment' );
+    like( $commented, qr{<location[ ]attr="&lt;!--">/x</location>}sx, 'and a comment marker inside an attribute is not a comment' );
 };
 
 subtest 'adopting the file of the package' => sub {
@@ -179,7 +185,7 @@ subtest 'adopting the file of the package' => sub {
 
     my $xml = Configd::Language::slurp("$root/var/ossec/etc/ossec.conf");
     is( Configd::Language::slurp("$root/var/ossec/etc/ossec.conf.d/00-original"), $PACKAGE, 'the file of the package is 00-original' );
-    like( $xml, qr{<email_notification>no</email_notification>}, 'and the generated file has the fragment in it' );
+    like( $xml, qr{<email_notification>no</email_notification>}sx, 'and the generated file has the fragment in it' );
     is( ( stat "$root/var/ossec/etc/ossec.conf" )[2] & 0o7777, 0o660, 'with the mode that the package gave it' );
 };
 

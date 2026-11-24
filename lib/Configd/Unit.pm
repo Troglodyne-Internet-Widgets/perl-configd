@@ -111,7 +111,7 @@ sub new {
 
     $opts{configd} //= '/usr/bin/configd';
     $opts{root}    //= $opts{language}->root() // q{};
-    $opts{root} =~ s{/\z}{};
+    $opts{root} =~ s{/\z}{}sx;
 
     return bless {%opts}, $class;
 }

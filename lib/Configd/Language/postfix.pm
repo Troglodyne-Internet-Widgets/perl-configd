@@ -1,4 +1,4 @@
-package Configd::Language::postfix;
+package Configd::Language::postfix;    ## no critic (NamingConventions::Capitalization) -- the name is the name of the service, which is how a language is picked on the command line
 
 #ABSTRACT: main.cf and master.cf, which postfix has never had a conf.d for.
 
@@ -6,10 +6,12 @@ use 5.034;
 
 use strict;
 use warnings FATAL => 'all';
+no autovivification;
 
 use re '/aa';
 
-use parent qw{Configd::Language};
+use List::Util qw{any};
+use parent     qw{Configd::Language};
 
 =head1 NAME
 
@@ -253,7 +255,7 @@ on every address.  C<@items> as they are for anything else.
 
 sub combine {
     my ( $self, $key, @items ) = @_;
-    return 'all' if $key eq 'inet_interfaces' && grep { $_ eq 'all' } @items;
+    return 'all' if $key eq 'inet_interfaces' && any { $_ eq 'all' } @items;
     return @items;
 }
 
@@ -277,10 +279,10 @@ sub parse {
 sub _is_master {
     my ( $self, $text ) = @_;
 
-    foreach my $line ( split( qq{\n}, $text ) ) {
-        next     if $line =~ m/\A\s*(?:#|\z)/;
-        return 0 if $line =~ m/\A\S+\s*=/;
-        return 1 if $line =~ m/\A\S+\s+(?:inet|unix|unix-dgram|fifo|pass)\s/;
+    foreach my $line ( split m/\n/sx, $text ) {
+        next     if $line =~ m/\A\s*(?:\#|\z)/sx;
+        return 0 if $line =~ m/\A\S+\s*=/sx;
+        return 1 if $line =~ m/\A\S+\s+(?:inet|unix|unix-dgram|fifo|pass)\s/sx;
     }
 
     return 0;
@@ -290,30 +292,30 @@ sub _parse_main {
     my ( $self, $text ) = @_;
 
     my @directives;
-    foreach my $line ( split( qq{\n}, $text ) ) {
+    foreach my $line ( split m/\n/sx, $text ) {
 
         # Postfix continues a value onto any following line that begins with
         # whitespace.  It belongs to the parameter above it, so it cannot be
         # merged on its own and has to travel with it.
-        if ( $line =~ m/\A\s+\S/ && @directives && defined $directives[-1]{key} ) {
-            my $continued = $line =~ s/\A\s+|\s+\z//gr;
+        if ( $line =~ m/\A\s+\S/sx && @directives && defined $directives[-1]{key} ) {
+            my $continued = $line =~ s/\A\s+|\s+\z//gsxr;
 
             # `param =` with the value on the lines below it is how postfix's
             # own main.cf writes the long ones, so the first continuation of an
             # empty value must not arrive with a space in front of it.
             $directives[-1]{value} =
-              length $directives[-1]{value}
+              length( $directives[-1]{value} ) > 0
               ? "$directives[-1]{value} $continued"
               : $continued;
             next;
         }
 
-        if ( $line =~ m/\A\s*(?:#.*)?\z/ ) {
+        if ( $line =~ m/\A\s*(?:\#.*)?\z/sx ) {
             push @directives, { text => $line };
             next;
         }
 
-        if ( $line =~ m/\A(\S+?)\s*=\s*(.*?)\s*\z/ ) {
+        if ( $line =~ m/\A(\S+?)\s*=\s*(.*?)\s*\z/sx ) {
             push @directives, { key => $1, value => $2 };
             next;
         }
@@ -329,21 +331,21 @@ sub _parse_master {
     my ( $self, $text ) = @_;
 
     my @directives;
-    foreach my $line ( split( qq{\n}, $text ) ) {
+    foreach my $line ( split m/\n/sx, $text ) {
 
         # Same continuation rule, and here it is how a service's command line
         # gets its -o overrides, one per line.
-        if ( $line =~ m/\A\s+\S/ && @directives && defined $directives[-1]{key} ) {
-            push @{ $directives[-1]{continuation} }, ( $line =~ s/\s+\z//r );
+        if ( $line =~ m/\A\s+\S/sx && @directives && defined $directives[-1]{key} ) {
+            push @{ $directives[-1]{continuation} }, ( $line =~ s/\s+\z//sxr );
             next;
         }
 
-        if ( $line =~ m/\A\s*(?:#.*)?\z/ ) {
+        if ( $line =~ m/\A\s*(?:\#.*)?\z/sx ) {
             push @directives, { text => $line };
             next;
         }
 
-        my @columns = split( /\s+/, $line );
+        my @columns = split m/\s+/sx, $line;
         die "Cannot parse postfix master.cf line (wanted 8 columns, got " . scalar(@columns) . "): $line\n"
           if @columns < 8;
 
@@ -370,7 +372,7 @@ Write the file back.  Which file, again, from what is in it.
 sub emit {
     my ( $self, $directives ) = @_;
 
-    my $is_master = scalar( grep { _is_master_key( $_->{key} ) } @$directives );
+    my $is_master = any { _is_master_key( $_->{key} ) } @$directives;
     return $is_master ? $self->_emit_master($directives) : $self->_emit_main($directives);
 }
 

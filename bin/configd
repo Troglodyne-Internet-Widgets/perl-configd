@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+#!perl
 
 package Configd::Bin::Configd;
 
@@ -156,7 +156,9 @@ sub main {
 sub say_unless_quiet {
     my ( $opt, @lines ) = @_;
     return if $opt->{quiet};
-    say $_ for @lines;
+    foreach my $line (@lines) {
+        say {*STDOUT} $line or die "Could not write to standard output: $!\n";
+    }
     return;
 }
 

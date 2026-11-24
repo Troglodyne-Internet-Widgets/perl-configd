@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+#!perl
 use 5.034;
 
 use strict;
@@ -36,6 +36,7 @@ sub run {
         open( my $fh, '>', \$out ) or die "Could not capture output: $!\n";
         local *STDOUT = $fh;
         $exit = Configd::Bin::Configd::main(@args);
+        close $fh or die "Could not finish capturing output: $!\n";
     }
 
     return ( $exit, $out );
@@ -51,7 +52,7 @@ subtest 'languages lists what is installed' => sub {
     my ( $exit, $out ) = run('languages');
 
     is( $exit, 0, 'exits zero' );
-    like( $out, qr/^postfix$/m, 'and names a language it found on disk' );
+    like( $out, qr/^postfix$/msx, 'and names a language it found on disk' );
 };
 
 subtest 'a root means these are not this machine files, so nothing is restarted' => sub {
@@ -66,9 +67,9 @@ subtest 'a root means these are not this machine files, so nothing is restarted'
 
     is( $exit, 0, 'adopt exits zero' );
     is_deeply( \@dispatched, [], 'and systemd was not touched' );
-    like( $out, qr{Adopted /etc/postfix/main\.cf},                             'saying what it took over' );
-    like( $out, qr{Wrote \Q$root\E/etc/systemd/system/postfix\@\.service\.d/}, 'and where the drop-in went' );
-    like( $out, qr/Not restarting/,                                            'and that it stopped short of the restart' );
+    like( $out, qr{Adopted[ ]/etc/postfix/main[.]cf}sx,                             'saying what it took over' );
+    like( $out, qr{Wrote[ ]\Q$root\E/etc/systemd/system/postfix@[.]service[.]d/}sx, 'and where the drop-in went' );
+    like( $out, qr/Not[ ]restarting/sx,                                             'and that it stopped short of the restart' );
 };
 
 subtest 'without a root it restarts what runs, not the template' => sub {
@@ -90,11 +91,11 @@ subtest 'build says what it rebuilt, and says when there was nothing to do' => s
 
     my ( $exit, $out ) = run( '--root', $root, 'build', 'postfix' );
     is( $exit, 0, 'exits zero' );
-    like( $out, qr/already up to date/, 'nothing changed' );
+    like( $out, qr/already[ ]up[ ]to[ ]date/sx, 'nothing changed' );
 
     fragment( $root, 'main.cf', '50-example.cf', "mydestination = example.com\n" );
     ( $exit, $out ) = run( '--root', $root, 'build', 'postfix' );
-    like( $out, qr{Rebuilt /etc/postfix/main\.cf}, 'and names the file when one does' );
+    like( $out, qr{Rebuilt[ ]/etc/postfix/main[.]cf}sx, 'and names the file when one does' );
 };
 
 subtest 'status exits non-zero until the service is actually wrapped' => sub {
@@ -104,21 +105,21 @@ subtest 'status exits non-zero until the service is actually wrapped' => sub {
 
     my ( $exit, $out ) = run( '--root', $root, 'status', 'postfix' );
     is( $exit, 1, 'not wrapped is a failure' );
-    like( $out, qr/NOT adopted/, 'and it says the files are not adopted' );
-    like( $out, qr/NOT wrapped/, 'nor the service wrapped' );
+    like( $out, qr/NOT[ ]adopted/sx, 'and it says the files are not adopted' );
+    like( $out, qr/NOT[ ]wrapped/sx, 'nor the service wrapped' );
 
     run( '--root', $root, 'adopt', 'postfix' );
     fragment( $root, 'main.cf', '50-example.cf', "mydestination = example.com\n" );
 
     ( $exit, $out ) = run( '--root', $root, 'status', 'postfix' );
     is( $exit, 0, 'wrapped is a success' );
-    like( $out, qr/2 fragments/,          'counting the fragments' );
-    like( $out, qr/^\s+50-example\.cf$/m, 'and naming them' );
+    like( $out, qr/2[ ]fragments/sx,         'counting the fragments' );
+    like( $out, qr/^\s+50-example[.]cf$/msx, 'and naming them' );
 
     # The drop-in is on the template, which is what status reports; the restart
     # goes elsewhere.  Reporting the restart target here would say the wrong
     # unit was wrapped.
-    like( $out, qr/\Qpostfix@.service\E: wrapped/, 'the unit the drop-in is on' );
+    like( $out, qr/postfix@[.]service:[ ]wrapped/sx, 'the unit the drop-in is on' );
 };
 
 subtest 'release puts it back and lets go' => sub {
@@ -131,8 +132,8 @@ subtest 'release puts it back and lets go' => sub {
 
     is( $exit, 0, 'exits zero' );
     is_deeply( \@dispatched, [], 'and does not restart under a root either' );
-    like( $out, qr{Removed \Q$root\E/etc/systemd/system/}, 'the drop-in is gone' );
-    like( $out, qr{Restored /etc/postfix/main\.cf},        'and the file is back' );
+    like( $out, qr{Removed[ ]\Q$root\E/etc/systemd/system/}sx, 'the drop-in is gone' );
+    like( $out, qr{Restored[ ]/etc/postfix/main[.]cf}sx,       'and the file is back' );
     is( Configd::Language::slurp("$root/etc/postfix/main.cf"), $was, 'byte for byte' );
 };
 
@@ -142,7 +143,7 @@ subtest 'quiet says nothing it does not have to' => sub {
     my ( $exit, $out ) = run( '--root', $root, qw{--quiet adopt postfix} );
     is( $exit, 0,   'still does the work' );
     is( $out,  q{}, 'and prints none of it' );
-    ok( -e "$root/etc/postfix/main.cf.d/00-original", 'the file really was adopted' );    ## no critic (ValuesAndExpressions::ProhibitFiletest_f)
+    ok( -e "$root/etc/postfix/main.cf.d/00-original", 'the file really was adopted' );
 };
 
 subtest 'a command or a language that does not exist says so' => sub {
@@ -151,12 +152,12 @@ subtest 'a command or a language that does not exist says so' => sub {
 
     my ($exit) = run('frobnicate');
     is( $exit, 2, 'an unknown command is a usage error' );
-    like( $warnings[-1], qr/No such command 'frobnicate'/, 'naming it' );
-    like( $warnings[-1], qr/adopt/,                        'and listing the ones there are' );
+    like( $warnings[-1], qr/No[ ]such[ ]command[ ]'frobnicate'/sx, 'naming it' );
+    like( $warnings[-1], qr/adopt/sx,                              'and listing the ones there are' );
 
     ($exit) = run( 'status', 'nosuchthing' );
     is( $exit, 1, 'an unknown language is a plain failure' );
-    like( $warnings[-1], qr/No language 'nosuchthing'/, 'naming it too' );
+    like( $warnings[-1], qr/No[ ]language[ ]'nosuchthing'/sx, 'naming it too' );
 };
 
 done_testing();

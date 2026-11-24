@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+#!perl
 use 5.034;
 
 use strict;
@@ -30,7 +30,7 @@ sub value_of {
 
 sub lines_for {
     my ( $language, $directives, $key ) = @_;
-    return grep { m/\A\Q$key\E\s/ } split( qq{\n}, $language->emit($directives) );
+    return grep { m/\A\Q$key\E\s/sx } split m/\n/sx, $language->emit($directives);
 }
 
 subtest 'a directive, some whitespace, and the rest of the line' => sub {
@@ -163,7 +163,7 @@ subtest 'each of them names the unit its drop-in goes on' => sub {
 {
 
     package Test::Language::NoReload;
-    our @ISA = ('Configd::Language::postfix');
+    use parent -norequire, 'Configd::Language::postfix';
     sub reloads { return 0 }
 }
 
@@ -175,11 +175,11 @@ subtest 'a drop-in does not add a reload the daemon cannot do' => sub {
     # cannot says so and gets ExecStartPre alone.
     my $postfix = 'Configd::Language::postfix'->new();
     ok( $postfix->reloads(), 'postfix reloads' );
-    like( Configd::Unit->new( language => $postfix )->render(), qr/^ExecReload=\+/m, 'so it keeps its ExecReload' );
+    like( Configd::Unit->new( language => $postfix )->render(), qr/^ExecReload=[+]/msx, 'so it keeps its ExecReload' );
 
     my $mute = bless {%$postfix}, 'Test::Language::NoReload';
     is( $mute->reloads(), 0, 'one that says it cannot' );
-    unlike( Configd::Unit->new( language => $mute )->render(), qr/^ExecReload=/m, 'gets ExecStartPre alone' );
+    unlike( Configd::Unit->new( language => $mute )->render(), qr/^ExecReload=/msx, 'gets ExecStartPre alone' );
 };
 
 done_testing();

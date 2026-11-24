@@ -10,6 +10,7 @@ use warnings FATAL => 'all';
 use re '/aa';
 
 use File::Basename qw{basename};
+use List::Util     qw{any};
 use Module::Load   ();
 
 use Configd::Unit();
@@ -147,13 +148,14 @@ sub languages {
         my $path = "$dir/Configd/Language";
         opendir( my $dh, $path ) or next;
         foreach my $file ( readdir($dh) ) {
-            next unless $file =~ m/\A(\w+)[.]pm\z/;
+            next unless $file =~ m/\A(\w+)[.]pm\z/sx;
             $seen{$1} = 1;
         }
         closedir $dh;
     }
 
-    return sort keys %seen;
+    my @languages = sort keys %seen;
+    return @languages;
 }
 
 =head2 language($name, %opts)
@@ -171,10 +173,10 @@ and does not load, such as the ossec language without L<XML::LibXML>.
 sub language {
     my ( $class, $name, %opts ) = @_;
 
-    die "Which language?\n" unless defined $name && length $name;
+    die "Which language?\n" if length( $name // q{} ) == 0;
 
     # It becomes part of a module name, so it has to be a name and not a path.
-    die "'$name' is not a language name\n" unless $name =~ m/\A\w+\z/;
+    die "'$name' is not a language name\n" unless $name =~ m/\A\w+\z/sx;
 
     my $module = "Configd::Language::$name";
     eval { Module::Load::load($module); 1 } or do {
@@ -184,7 +186,7 @@ sub language {
         # A language that is here and does not load is not a typo.  The ossec
         # language needs XML::LibXML, and "no language" would send whoever
         # reads it looking for the wrong thing.
-        die "The language '$name' does not load: $error" if grep { $_ eq $name } @known;
+        die "The language '$name' does not load: $error" if any { $_ eq $name } @known;
         die "No language '$name'. This installation knows: " . join( ', ', @known ) . "\n";
     };
 
@@ -208,7 +210,7 @@ sub build {
 
     my @changed;
     foreach my $file ( $language->files() ) {
-        push @changed, $file->{path} if $language->write($file);
+        push @changed, $file->{path} if $language->write_file($file);
     }
 
     return @changed;
@@ -285,11 +287,14 @@ sub status {
 
     my @files;
     foreach my $file ( $language->files() ) {
-        my @fragments = $language->fragments($file);
+        my @names;
+        foreach my $fragment ( $language->fragments($file) ) {
+            push @names, basename($fragment);
+        }
         push @files, {
             path      => $file->{path},
-            adopted   => ( scalar grep { basename($_) eq '00-original' } @fragments ) ? 1 : 0,
-            fragments => [ map { basename($_) } @fragments ],
+            adopted   => ( any { $_ eq '00-original' } @names ) ? 1 : 0,
+            fragments => \@names,
         };
     }
 
