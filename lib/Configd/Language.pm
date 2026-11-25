@@ -377,13 +377,15 @@ sub separator {
     return ', ';
 }
 
-=head2 @items = $language->items($key, $value)
+=head2 $language->items($key, $value)
 
 The items of the value of an accumulating directive, in order.  They are
 separated by whitespace and by the punctuation of C<separator>, so a value
 written over several lines, or with a trailing comma as postfix's own
 C<mydestination> has, gives no empty item.  A separator inside braces does not
 split, because postfix reads C<{ ... }> as one item, as in an C<inline:> table.
+
+    my @items = $language->items($key, $value);
 
 =cut
 
@@ -406,12 +408,14 @@ sub items {
     return grep { length($_) > 0 } @items;
 }
 
-=head2 @items = $language->combine($key, @items)
+=head2 $language->combine($key, @items)
 
 The items that an accumulating directive ends with, after the merge has
 dropped the repeats.  C<@items> as they are by default.  A language overrides
 this for a parameter whose items are not a plain set, such as C<all> in the
 C<inet_interfaces> of postfix.
+
+    my @items = $language->combine($key, @items);
 
 =cut
 
@@ -687,7 +691,7 @@ sub write_file {
     return 1;
 }
 
-=head2 @taken = $language->take_package_update($file)
+=head2 $language->take_package_update($file)
 
 Make the new version of an adopted file that the package manager left beside
 it the new C<00-original>, and return the paths that it took.
@@ -708,6 +712,8 @@ gives.  Each file taken is reported on standard error, which reaches the
 journal of the service when the drop-in runs this.
 
 Does nothing to a file that is not adopted.
+
+    my @taken = $language->take_package_update($file);
 
 =cut
 

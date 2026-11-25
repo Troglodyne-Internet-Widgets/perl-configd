@@ -153,9 +153,11 @@ sub separator {
     return "\n";
 }
 
-=head2 @items = $language->items($key, $value)
+=head2 $language->items($key, $value)
 
 The elements in C<$value>, each as one line of XML.
+
+    my @items = $language->items($key, $value);
 
 =cut
 
@@ -253,10 +255,12 @@ sub header {
 
 =head1 FUNCTIONS
 
-=head2 ($section, $child) = sections($key)
+=head2 sections($key)
 
 The section of a directive's key, and the child, or undef for a key that names a
 whole section.
+
+    my ($section, $child) = sections($key);
 
 =cut
 
@@ -268,13 +272,15 @@ sub sections {
     return ( substr( $key, 0, $slash ), substr( $key, $slash + 1 ) );
 }
 
-=head2 @elements = elements($xml)
+=head2 elements($xml)
 
 The elements at the top level of C<$xml>, in order, each a hashref of C<name>,
 C<node>, the element with its comments and the space between its tags taken
 out, C<text>, that element as one line of XML, and C<empty>, true for an
 element with no content and no attributes.  Dies on XML that does not parse,
 and on text outside an element.
+
+    my @elements = elements($xml);
 
 =cut
 
@@ -293,7 +299,7 @@ sub elements {
     return children( document($xml)->documentElement );
 }
 
-=head2 $doc = document($xml)
+=head2 document($xml)
 
 C<$xml> parsed inside an element of its own, because the package writes more
 than one C<< <ossec_config> >> in the file, and a document has one root.  A
@@ -307,6 +313,8 @@ those two hyphens and nothing else, this puts a space between them at the line
 and column that libxml2 gives, and parses again.  The comment is dropped from
 the merge either way, and C<00-original> keeps the file as it was.  Dies on any
 other error.
+
+    my $doc = document($xml);
 
 =cut
 
@@ -336,12 +344,14 @@ sub document {
     die "Cannot read the XML: more than $MOST_HYPHENS comments with two hyphens in them\n";
 }
 
-=head2 $offset = hyphens(\@lines, $line, $column)
+=head2 hyphens(\@lines, $line, $column)
 
 Where in line C<$line> of C<@lines>, counted from 0, the two hyphens are that
 libxml2 reports at C<$column>, counted from 1: the first two at or after that
 column that neither start C<< <!-- >> nor end with C<< --> >>.  Undef when there
 are none, so that the error goes to the caller as it was.
+
+    my $offset = hyphens(\@lines, $line, $column);
 
 =cut
 
@@ -360,10 +370,12 @@ sub hyphens {
     return;
 }
 
-=head2 @elements = children($node)
+=head2 children($node)
 
 The child elements of C<$node>, as C<elements> gives them.  Dies on text
 beside them that is not space.
+
+    my @elements = children($node);
 
 =cut
 
@@ -390,11 +402,13 @@ sub children {
     return @elements;
 }
 
-=head2 $node = tidy($node)
+=head2 tidy($node)
 
 C<$node> with its comments, processing instructions and text that is only
 space taken out, at every depth.  The space between tags is for people, and two
 blocks that differ in it are the same block.
+
+    my $node = tidy($node);
 
 =cut
 
